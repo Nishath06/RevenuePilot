@@ -1,0 +1,30 @@
+# FastAPI & ASGI
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+
+# MongoDB (async) — versions resolved by pip for agno compatibility
+motor>=3.5.0
+pymongo>=4.6.0
+
+# AI / Agent Framework
+agno>=2.9.0
+openai>=1.55.0
+langgraph>=0.2.0
+
+# Settings & Validation
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+
+# Logging
+structlog>=24.4.0
+
+# HTTP Client
+httpx>=0.27.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.24.0

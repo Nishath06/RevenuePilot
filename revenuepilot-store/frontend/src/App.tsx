@@ -15,6 +15,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { MerchantDashboard } from './pages/MerchantDashboard';
+import { AICopilotDashboard } from './pages/AICopilotDashboard';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,7 +64,8 @@ export const App: React.FC = () => {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/merchant" element={<MerchantDashboard />} />
+              <Route path="/merchant" element={<AICopilotDashboard />} />
+              <Route path="/merchant/legacy" element={<MerchantDashboard />} />
             </Routes>
           </main>
           <Footer />

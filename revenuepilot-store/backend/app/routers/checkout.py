@@ -20,10 +20,12 @@ async def create_order(
 ):
     items_to_order = []
 
+    # Use items sent from frontend or fetch from cart
     if req.items and len(req.items) > 0:
         items_to_order = req.items
     else:
         cart = await Cart.find_one(Cart.user_id == str(current_user.id))
+
         if not cart or not cart.items:
             raise HTTPException(status_code=400, detail="Cart is empty")
 
@@ -33,53 +35,51 @@ async def create_order(
                 title=item.title,
                 price=item.price,
                 image=item.image,
-                quantity=item.quantity
+                quantity=item.quantity,
             )
             for item in cart.items
         ]
 
-    # Original order amount (keep for DB)
-    original_total = round(
-        sum(item.price * item.quantity for item in items_to_order), 2
+    # ✅ Calculate actual cart total
+    total_amount = round(
+        sum(item.price * item.quantity for item in items_to_order),
+        2
     )
-
-    # -----------------------------
-    # TEST MODE ONLY (Day 1)
-    # Change back to original_total after testing.
-    # -----------------------------
-    razorpay_amount = 100.00  # ₹100 test payment
 
     order_id = f"ord_{uuid.uuid4().hex[:12]}"
 
+    # ✅ Create Razorpay order using real cart amount
     rzp_order = razorpay_service.create_order(
-        amount=razorpay_amount,
+        amount=total_amount,
         currency="INR",
         receipt=order_id,
         notes={
             "order_id": order_id,
-            "user_id": str(current_user.id)
-        }
+            "user_id": str(current_user.id),
+        },
     )
 
+    # Save order in MongoDB
     db_order = Order(
         order_id=order_id,
         user_id=str(current_user.id),
         items=items_to_order,
-        total_amount=original_total,
+        total_amount=total_amount,
         currency="INR",
         razorpay_order_id=rzp_order["id"],
         payment_status="Pending",
         order_status="Pending",
-        created_at=datetime.now(timezone.utc)
+        created_at=datetime.now(timezone.utc),
     )
+
     await db_order.insert()
 
     return RazorpayOrderResponse(
         order_id=db_order.order_id,
         razorpay_order_id=rzp_order["id"],
-        amount=rzp_order["amount"],  # 10000 paise
+        amount=rzp_order["amount"],      # Amount returned by Razorpay (in paise)
         currency=rzp_order["currency"],
-        key=settings.RAZORPAY_KEY_ID
+        key=settings.RAZORPAY_KEY_ID,
     )
 
 @router.post("/checkout/verify-payment")
