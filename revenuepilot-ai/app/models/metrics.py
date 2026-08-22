@@ -24,9 +24,13 @@ class OrderMetrics(BaseModel):
     total: int = 0
     paid: int = 0
     pending: int = 0
+    failed: int = 0
     cancelled: int = 0
     today: int = 0
     this_week: int = 0
+    paid_today: int = 0
+    failed_today: int = 0
+    cancelled_today: int = 0
 
 
 class PaymentMethodCount(BaseModel):
@@ -38,7 +42,11 @@ class PaymentMethodCount(BaseModel):
 class PaymentMetrics(BaseModel):
     successful: int = 0
     failed: int = 0
+    cancelled: int = 0
+    failed_today: int = 0
+    cancelled_today: int = 0
     success_rate: float = 0.0
+    failure_rate: float = 0.0
     method_breakdown: list[PaymentMethodCount] = Field(default_factory=list)
 
 

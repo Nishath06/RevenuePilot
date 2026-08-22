@@ -42,16 +42,32 @@ def _utc_now() -> datetime:
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def revenue_today() -> float:
-    """Sum of paid order totals created today (UTC)."""
+    """Sum of paid order totals created today (UTC). Handles both tz-aware and naive stored datetimes."""
+    import time
+    t0 = time.monotonic()
     now = _utc_now()
-    start = _start_of_day(now)
+    start_aware = _start_of_day(now)
+    start_naive = start_aware.replace(tzinfo=None)
     col = get_collection("orders")
+
+    # Try tz-aware first
     pipeline = [
-        {"$match": {"payment_status": "Paid", "created_at": {"$gte": start}}},
-        {"$group": {"_id": None, "total": {"$sum": "$total_amount"}}},
+        {"$match": {"payment_status": "Paid", "created_at": {"$gte": start_aware}}},
+        {"$group": {"_id": None, "total": {"$sum": "$total_amount"}, "count": {"$sum": 1}}},
     ]
     result = await col.aggregate(pipeline).to_list(1)
-    return result[0]["total"] if result else 0.0
+
+    # If nothing found, try naive datetime (MongoDB stored without tz)
+    if not result:
+        pipeline[0]["$match"]["created_at"] = {"$gte": start_naive}
+        result = await col.aggregate(pipeline).to_list(1)
+
+    revenue = result[0]["total"] if result else 0.0
+    count = result[0]["count"] if result else 0
+    elapsed = round((time.monotonic() - t0) * 1000, 1)
+    logger.info("revenue_today", revenue=revenue, paid_orders=count,
+                start=str(start_aware), elapsed_ms=elapsed)
+    return revenue
 
 
 async def revenue_yesterday() -> float:
@@ -145,38 +161,105 @@ async def paid_orders() -> int:
     return await col.count_documents({"payment_status": "Paid"})
 
 
+async def paid_orders_today() -> int:
+    """Count paid orders created today — handles both tz-aware and naive datetimes."""
+    now = _utc_now()
+    start_aware = _start_of_day(now)
+    start_naive = start_aware.replace(tzinfo=None)
+    col = get_collection("orders")
+    count = await col.count_documents({"payment_status": "Paid", "created_at": {"$gte": start_aware}})
+    if count == 0:
+        count = await col.count_documents({"payment_status": "Paid", "created_at": {"$gte": start_naive}})
+    logger.info("paid_orders_today", count=count)
+    return count
+
+
 async def pending_orders() -> int:
     col = get_collection("orders")
     return await col.count_documents({"payment_status": "Pending"})
 
 
-async def cancelled_orders() -> int:
+async def failed_orders() -> int:
+    """Count all-time orders with Failed payment status."""
     col = get_collection("orders")
     return await col.count_documents({"payment_status": "Failed"})
 
 
-async def orders_today() -> int:
-    now = _utc_now()
-    start = _start_of_day(now)
+async def cancelled_orders() -> int:
+    """Count all-time orders with Cancelled payment status."""
     col = get_collection("orders")
-    return await col.count_documents({"created_at": {"$gte": start}})
+    return await col.count_documents({"payment_status": "Cancelled"})
+
+
+async def _today_order_count(status: str) -> int:
+    """Count orders of a given payment_status created today. Handles tz-aware/naive."""
+    now = _utc_now()
+    start_aware = _start_of_day(now)
+    start_naive = start_aware.replace(tzinfo=None)
+    col = get_collection("orders")
+    count = await col.count_documents({"payment_status": status, "created_at": {"$gte": start_aware}})
+    if count == 0:
+        count = await col.count_documents({"payment_status": status, "created_at": {"$gte": start_naive}})
+    return count
+
+
+async def failed_orders_today() -> int:
+    return await _today_order_count("Failed")
+
+
+async def cancelled_orders_today() -> int:
+    return await _today_order_count("Cancelled")
+
+async def orders_today() -> int:
+    """Count all orders created today regardless of status."""
+    now = _utc_now()
+    start_aware = _start_of_day(now)
+    start_naive = start_aware.replace(tzinfo=None)
+    col = get_collection("orders")
+    count = await col.count_documents({"created_at": {"$gte": start_aware}})
+    if count == 0:
+        count = await col.count_documents({"created_at": {"$gte": start_naive}})
+    return count
 
 
 async def orders_this_week() -> int:
     now = _utc_now()
     week_start = _start_of_day(now) - timedelta(days=now.weekday())
     col = get_collection("orders")
-    return await col.count_documents({"created_at": {"$gte": week_start}})
+    count = await col.count_documents({"created_at": {"$gte": week_start}})
+    if count == 0:
+        count = await col.count_documents({"created_at": {"$gte": week_start.replace(tzinfo=None)}})
+    return count
 
 
 async def get_order_metrics() -> OrderMetrics:
+    import time
+    t0 = time.monotonic()
+    total = await total_orders()
+    paid = await paid_orders()
+    pending = await pending_orders()
+    failed = await failed_orders()
+    cancelled = await cancelled_orders()
+    today = await orders_today()
+    paid_today = await paid_orders_today()
+    failed_today = await failed_orders_today()
+    cancelled_today = await cancelled_orders_today()
+    this_week = await orders_this_week()
+    elapsed = round((time.monotonic() - t0) * 1000, 1)
+    logger.info("get_order_metrics",
+                total=total, paid_today=paid_today, failed_today=failed_today,
+                cancelled_today=cancelled_today, pending=pending, elapsed_ms=elapsed)
     return OrderMetrics(
-        total=await total_orders(),
-        paid=await paid_orders(),
-        pending=await pending_orders(),
-        cancelled=await cancelled_orders(),
-        today=await orders_today(),
-        this_week=await orders_this_week(),
+        total=total,
+        paid=paid_today,
+        pending=pending,
+        failed=failed,
+        cancelled=cancelled,
+        today=today,
+        this_week=this_week,
+        paid_today=paid_today,
+        failed_today=failed_today,
+        cancelled_today=cancelled_today,
     )
 
 
@@ -184,28 +267,80 @@ async def get_order_metrics() -> OrderMetrics:
 # Payment Metrics
 # ─────────────────────────────────────────────────────────────────────────────
 
+async def col_count(collection_name: str, query: dict) -> int:
+    """Helper to count documents."""
+    col = get_collection(collection_name)
+    return await col.count_documents(query)
+
+
 async def successful_payments() -> int:
+    """Count all-time captured payments."""
     col = get_collection("payments")
     return await col.count_documents({"status": "captured"})
 
 
 async def failed_payments() -> int:
+    """Count all-time failed payments."""
     col = get_collection("payments")
     return await col.count_documents({"status": "failed"})
 
 
+async def failed_payments_today() -> int:
+    """Count today's failed payments."""
+    now = _utc_now()
+    start = _start_of_day(now)
+    col = get_collection("payments")
+    # Try tz-aware first, fall back to naive
+    count = await col.count_documents({"status": "failed", "created_at": {"$gte": start}})
+    if count == 0:
+        count = await col.count_documents({"status": "failed", "created_at": {"$gte": start.replace(tzinfo=None)}})
+    return count
+
+
+async def cancelled_payments_today() -> int:
+    """Count today's cancelled payments."""
+    now = _utc_now()
+    start = _start_of_day(now)
+    col = get_collection("payments")
+    count = await col.count_documents({"status": "cancelled", "created_at": {"$gte": start}})
+    if count == 0:
+        count = await col.count_documents({"status": "cancelled", "created_at": {"$gte": start.replace(tzinfo=None)}})
+    return count
+
+
+async def recovery_candidates() -> dict:
+    """Retrieve all candidates for revenue recovery: failed, cancelled, and abandoned carts."""
+    orders_col = get_collection("orders")
+    failed = await orders_col.find({"payment_status": "Failed"}).sort("created_at", -1).to_list(50)
+    cancelled = await orders_col.find({"payment_status": "Cancelled"}).sort("created_at", -1).to_list(50)
+    carts = await abandoned_carts(limit=50)
+    return {
+        "failed_orders_count": len(failed),
+        "cancelled_orders_count": len(cancelled),
+        "abandoned_carts_count": len(carts),
+        "total_candidates": len(failed) + len(cancelled) + len(carts),
+    }
+
+
+
 async def payment_success_rate() -> float:
-    total = await col_count("payments", {})
+    """Compute all-time payment success rate."""
+    col = get_collection("payments")
+    total = await col.count_documents({})
     success = await successful_payments()
     if total == 0:
-        return 0.0
-    return round((success / total) * 100, 2)
-
-
-async def col_count(collection_name: str, query: dict) -> int:
-    """Helper to count documents."""
-    col = get_collection(collection_name)
-    return await col.count_documents(query)
+        # Fallback: derive from orders if no payments collection entries
+        orders_col = get_collection("orders")
+        paid = await orders_col.count_documents({"payment_status": "Paid"})
+        total_orders = await orders_col.count_documents({})
+        if total_orders == 0:
+            return 0.0
+        rate = round((paid / total_orders) * 100, 2)
+        logger.info("payment_success_rate derived from orders", rate=rate, paid=paid, total=total_orders)
+        return rate
+    rate = round((success / total) * 100, 2)
+    logger.info("payment_success_rate", rate=rate, success=success, total=total)
+    return rate
 
 
 async def payment_method_breakdown() -> list[PaymentMethodCount]:
@@ -232,14 +367,96 @@ async def payment_method_breakdown() -> list[PaymentMethodCount]:
     ]
 
 
-async def get_payment_metrics() -> PaymentMetrics:
-    total = await col_count("payments", {})
+async def cancelled_payments() -> int:
+    """Count all-time cancelled payments."""
+    col = get_collection("payments")
+    return await col.count_documents({"status": "cancelled"})
+
+
+async def failure_rate() -> float:
+    """failure_rate = failed / (successful + failed), cancellations excluded."""
     success = await successful_payments()
-    rate = round((success / total) * 100, 2) if total > 0 else 0.0
+    failed = await failed_payments()
+    terminal = success + failed
+    return round((failed / terminal) * 100, 2) if terminal > 0 else 0.0
+
+
+async def payment_failure_rate() -> float:
+    """payment_failure_rate = failed / (successful + failed), cancellations excluded."""
+    return await failure_rate()
+
+
+async def payment_cancellation_rate() -> float:
+    """payment_cancellation_rate = cancelled / (successful + failed + cancelled)."""
+    success = await successful_payments()
+    failed = await failed_payments()
+    cancelled = await cancelled_payments()
+    total_attempts = success + failed + cancelled
+    return round((cancelled / total_attempts) * 100, 2) if total_attempts > 0 else 0.0
+
+
+async def recovery_value() -> float:
+    """Total monetary value of all recoverable candidates (Failed + Cancelled + Abandoned Carts)."""
+    orders_col = get_collection("orders")
+    failed_docs = await orders_col.find({"payment_status": "Failed"}).to_list(1000)
+    cancelled_docs = await orders_col.find({"payment_status": "Cancelled"}).to_list(1000)
+    carts = await abandoned_carts(limit=1000)
+
+    failed_val = sum(o.get("total_amount", 0) for o in failed_docs)
+    cancelled_val = sum(o.get("total_amount", 0) for o in cancelled_docs)
+    cart_val = sum(c.total_value for c in carts)
+
+    return round(failed_val + cancelled_val + cart_val, 2)
+
+
+
+async def get_payment_metrics() -> PaymentMetrics:
+    import time
+    t0 = time.monotonic()
+    col = get_collection("payments")
+    total = await col.count_documents({})
+    success = await successful_payments()
+    failed = await failed_payments()
+    cancelled = await cancelled_payments()
+
+    # If payments collection empty, derive from orders (webhook-only stores)
+    if total == 0:
+        orders_col = get_collection("orders")
+        paid = await orders_col.count_documents({"payment_status": "Paid"})
+        fail_o = await orders_col.count_documents({"payment_status": "Failed"})
+        cancel_o = await orders_col.count_documents({"payment_status": "Cancelled"})
+        terminal = paid + fail_o
+        rate = round((paid / terminal) * 100, 2) if terminal > 0 else 0.0
+        f_rate = round((fail_o / terminal) * 100, 2) if terminal > 0 else 0.0
+        elapsed = round((time.monotonic() - t0) * 1000, 1)
+        logger.info("get_payment_metrics (orders fallback)",
+                    success_rate=rate, paid=paid, failed=fail_o, cancelled=cancel_o, elapsed_ms=elapsed)
+        return PaymentMetrics(
+            successful=paid,
+            failed=fail_o,
+            cancelled=cancel_o,
+            failed_today=await failed_payments_today(),
+            cancelled_today=await _today_order_count("Cancelled"),
+            success_rate=rate,
+            failure_rate=f_rate,
+            method_breakdown=await payment_method_breakdown(),
+        )
+
+    terminal = success + failed
+    rate = round((success / terminal) * 100, 2) if terminal > 0 else 0.0
+    f_rate = round((failed / terminal) * 100, 2) if terminal > 0 else 0.0
+    elapsed = round((time.monotonic() - t0) * 1000, 1)
+    logger.info("get_payment_metrics",
+                success_rate=rate, failure_rate=f_rate, successful=success,
+                failed=failed, cancelled=cancelled, total=total, elapsed_ms=elapsed)
     return PaymentMetrics(
         successful=success,
-        failed=await failed_payments(),
+        failed=failed,
+        cancelled=cancelled,
+        failed_today=await failed_payments_today(),
+        cancelled_today=await _today_order_count("Cancelled"),
         success_rate=rate,
+        failure_rate=f_rate,
         method_breakdown=await payment_method_breakdown(),
     )
 

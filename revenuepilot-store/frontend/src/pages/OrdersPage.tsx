@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Clock, CheckCircle2, XCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Package, Clock, CheckCircle2, XCircle, AlertTriangle, ArrowRight, Ban } from 'lucide-react';
 import { checkoutService } from '../services/checkout.service';
 import { Order } from '../types';
 import { Link } from 'react-router-dom';
@@ -8,8 +8,10 @@ export const OrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchOrders = () => {
+    setLoading(true);
     checkoutService
       .getOrders()
       .then((data) => setOrders(data))
@@ -18,7 +20,27 @@ export const OrdersPage: React.FC = () => {
         setErrorMsg(err.response?.data?.detail || 'Failed to fetch order history.');
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchOrders();
   }, []);
+
+  const handleCancelOrder = async (razorpayOrderId: string) => {
+    setCancellingId(razorpayOrderId);
+    try {
+      await checkoutService.updatePaymentStatus({
+        razorpay_order_id: razorpayOrderId,
+        payment_status: 'cancelled',
+        reason: 'Customer manually cancelled order from Order History',
+      });
+      fetchOrders();
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const getStatusPill = (status: string, labelPrefix?: string) => {
     const text = labelPrefix ? `${labelPrefix}: ${status}` : status;
@@ -94,51 +116,68 @@ export const OrdersPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6">
-          {orders.map((order) => (
-            <div
-              key={order.order_id}
-              className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 space-y-6"
-            >
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-base font-extrabold text-slate-900">Order ID: {order.order_id}</span>
-                    {getStatusPill(order.payment_status, 'Payment')}
-                    {getStatusPill(order.order_status, 'Order')}
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    Placed on {new Date(order.created_at).toLocaleString()} • Razorpay ID: <span className="font-mono font-semibold text-indigo-600">{order.razorpay_order_id}</span>
-                  </p>
-                </div>
-                <div className="text-left sm:text-right">
-                  <span className="text-xs text-slate-400 block font-medium">Total Amount</span>
-                  <span className="text-xl font-extrabold text-slate-900">₹{order.total_amount.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
+          {orders.map((order) => {
+            const isPending = order.payment_status === 'Pending';
+            const isCancelling = cancellingId === order.razorpay_order_id;
 
-              {/* Items */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ordered Items</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {order.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                      <img
-                        src={item.image || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=200&auto=format&fit=crop&q=80'}
-                        alt={item.title}
-                        className="w-12 h-12 object-cover rounded-lg bg-white border border-slate-200"
-                      />
-                      <div className="text-xs">
-                        <span className="font-bold text-slate-900 line-clamp-1">{item.title}</span>
-                        <span className="text-slate-500 font-medium">{item.quantity} x ₹{item.price.toLocaleString('en-IN')}</span>
-                      </div>
+            return (
+              <div
+                key={order.order_id}
+                className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 space-y-6"
+              >
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-base font-extrabold text-slate-900">Order ID: {order.order_id}</span>
+                      {getStatusPill(order.payment_status, 'Payment')}
+                      {getStatusPill(order.order_status, 'Order')}
                     </div>
-                  ))}
+                    <p className="text-xs text-slate-400">
+                      Placed on {new Date(order.created_at).toLocaleString()} • Razorpay ID: <span className="font-mono font-semibold text-indigo-600">{order.razorpay_order_id}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-left sm:text-right">
+                      <span className="text-xs text-slate-400 block font-medium">Total Amount</span>
+                      <span className="text-xl font-extrabold text-slate-900">₹{order.total_amount.toLocaleString('en-IN')}</span>
+                    </div>
+                    {isPending && (
+                      <button
+                        onClick={() => handleCancelOrder(order.razorpay_order_id)}
+                        disabled={isCancelling}
+                        className="px-3 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      >
+                        <Ban className="w-3.5 h-3.5 text-rose-600" />
+                        {isCancelling ? 'Cancelling…' : 'Cancel Order'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-            </div>
-          ))}
+                {/* Items */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ordered Items</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {order.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <img
+                          src={item.image || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=200&auto=format&fit=crop&q=80'}
+                          alt={item.title}
+                          className="w-12 h-12 object-cover rounded-lg bg-white border border-slate-200"
+                        />
+                        <div className="text-xs">
+                          <span className="font-bold text-slate-900 line-clamp-1">{item.title}</span>
+                          <span className="text-slate-500 font-medium">{item.quantity} x ₹{item.price.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
         </div>
       )}
 

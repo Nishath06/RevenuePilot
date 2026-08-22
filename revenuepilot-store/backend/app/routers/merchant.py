@@ -11,10 +11,26 @@ router = APIRouter(prefix="/merchant", tags=["Merchant & AI Integration APIs"])
 @router.get("/orders")
 async def get_merchant_orders(limit: int = 100, skip: int = 0):
     orders = await Order.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
-    return [
-        {
+    result = []
+    for o in orders:
+        user_doc = None
+        try:
+            from bson import ObjectId
+            if ObjectId.is_valid(o.user_id):
+                user_doc = await User.get(ObjectId(o.user_id))
+            if not user_doc:
+                user_doc = await User.find_one(User.email == o.user_id)
+        except Exception:
+            pass
+
+        customer_name = user_doc.name if user_doc and user_doc.name else f"Customer {o.user_id[-6:] if o.user_id else ''}"
+        customer_email = user_doc.email if user_doc and user_doc.email else ""
+
+        result.append({
             "order_id": o.order_id,
             "user_id": o.user_id,
+            "customer_name": customer_name,
+            "customer_email": customer_email,
             "items_count": len(o.items),
             "total_amount": o.total_amount,
             "currency": o.currency,
@@ -22,24 +38,48 @@ async def get_merchant_orders(limit: int = 100, skip: int = 0):
             "payment_status": o.payment_status,
             "order_status": o.order_status,
             "created_at": o.created_at.isoformat()
-        } for o in orders
-    ]
+        })
+    return result
 
 @router.get("/payments")
 async def get_merchant_payments(limit: int = 100, skip: int = 0):
     payments = await Payment.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
-    return [
-        {
+    result = []
+    for p in payments:
+        user_name = "Customer"
+        user_email = ""
+        if p.order_id:
+            order = await Order.find_one(Order.order_id == p.order_id)
+            if not order:
+                order = await Order.find_one(Order.razorpay_order_id == p.order_id)
+            if order and order.user_id:
+                try:
+                    from bson import ObjectId
+                    user_doc = None
+                    if ObjectId.is_valid(order.user_id):
+                        user_doc = await User.get(ObjectId(order.user_id))
+                    if not user_doc:
+                        user_doc = await User.find_one(User.email == order.user_id)
+                    if user_doc:
+                        user_name = user_doc.name or "Customer"
+                        user_email = user_doc.email or ""
+                except Exception:
+                    pass
+
+        result.append({
             "payment_id": p.payment_id,
             "order_id": p.order_id,
             "razorpay_payment_id": p.razorpay_payment_id,
+            "customer_name": user_name,
+            "customer_email": user_email,
             "amount": p.amount,
             "method": p.method,
             "status": p.status,
             "failure_reason": p.failure_reason,
+            "error_code": p.error_code,
             "created_at": p.created_at.isoformat()
-        } for p in payments
-    ]
+        })
+    return result
 
 @router.get("/customers")
 async def get_merchant_customers(limit: int = 100, skip: int = 0):
@@ -55,23 +95,36 @@ async def get_merchant_customers(limit: int = 100, skip: int = 0):
     ]
 
 @router.get("/revenue-summary", response_model=RevenueSummaryOut)
+@router.get("/summary", response_model=RevenueSummaryOut)
 async def get_merchant_revenue_summary():
     all_orders = await Order.find_all().to_list()
     total_orders = len(all_orders)
-    
-    paid_orders_list = [o for o in all_orders if o.payment_status == "Paid"]
-    paid_orders = len(paid_orders_list)
-    total_revenue = round(sum(o.total_amount for o in paid_orders_list), 2)
-    
-    failed_payments = len([o for o in all_orders if o.payment_status == "Failed"])
-    pending_orders = len([o for o in all_orders if o.payment_status == "Pending"])
-    
+
+    paid_orders_list     = [o for o in all_orders if o.payment_status == "Paid"]
+    failed_orders_list   = [o for o in all_orders if o.payment_status == "Failed"]
+    cancelled_orders_list= [o for o in all_orders if o.payment_status == "Cancelled"]
+    pending_orders_list  = [o for o in all_orders if o.payment_status == "Pending"]
+
+    paid_count       = len(paid_orders_list)
+    failed_count     = len(failed_orders_list)
+    cancelled_count  = len(cancelled_orders_list)
+    pending_count    = len(pending_orders_list)
+    total_revenue    = round(sum(o.total_amount for o in paid_orders_list), 2)
+
+    # Success rate = paid / (paid + failed), excluding pending and cancelled
+    terminal_count = paid_count + failed_count
+    success_rate = round((paid_count / terminal_count) * 100, 2) if terminal_count > 0 else 0.0
+    failure_rate = round((failed_count / terminal_count) * 100, 2) if terminal_count > 0 else 0.0
+
     return RevenueSummaryOut(
         total_orders=total_orders,
         total_revenue=total_revenue,
-        paid_orders=paid_orders,
-        failed_payments=failed_payments,
-        pending_orders=pending_orders
+        paid_orders=paid_count,
+        failed_payments=failed_count,
+        cancelled_orders=cancelled_count,
+        pending_orders=pending_count,
+        payment_success_rate=success_rate,
+        failure_rate=failure_rate,
     )
 
 @router.get("/events")

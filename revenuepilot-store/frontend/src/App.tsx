@@ -14,8 +14,6 @@ import { OrdersPage } from './pages/OrdersPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
-import { MerchantDashboard } from './pages/MerchantDashboard';
-import { AICopilotDashboard } from './pages/AICopilotDashboard';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,34 +36,11 @@ export const App: React.FC = () => {
               <Route path="/products" element={<ProductsPage />} />
               <Route path="/products/:id" element={<ProductDetailPage />} />
               <Route path="/cart" element={<CartPage />} />
-              <Route
-                path="/checkout"
-                element={
-                  <ProtectedRoute>
-                    <CheckoutPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/orders"
-                element={
-                  <ProtectedRoute>
-                    <OrdersPage />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+              <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute>
-                    <ProfilePage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/merchant" element={<AICopilotDashboard />} />
-              <Route path="/merchant/legacy" element={<MerchantDashboard />} />
+              <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             </Routes>
           </main>
           <Footer />

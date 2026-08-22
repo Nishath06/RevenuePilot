@@ -10,6 +10,12 @@ class OrderItem(BaseModel):
     image: Optional[str] = ""
     quantity: int
 
+class PaymentEvent(BaseModel):
+    status: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    reason: Optional[str] = None
+    error_code: Optional[str] = None
+
 class Order(Document):
     order_id: Indexed(str, unique=True)
     user_id: Indexed(str)
@@ -17,8 +23,9 @@ class Order(Document):
     total_amount: float
     currency: str = "INR"
     razorpay_order_id: Indexed(str)
-    payment_status: str = "Pending"  # Pending, Paid, Failed
+    payment_status: str = "Pending"  # Pending, Paid, Failed, Cancelled
     order_status: str = "Pending"    # Pending, Paid, Failed, Cancelled
+    payment_events: List[PaymentEvent] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

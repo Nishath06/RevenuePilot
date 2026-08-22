@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel
 from app.models.order import OrderItem
 
@@ -10,6 +10,13 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
+
+class PaymentStatusRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: Optional[str] = None
+    payment_status: Literal["failed", "cancelled"]
+    reason: Optional[str] = None
+    error_code: Optional[str] = None
 
 class RazorpayOrderResponse(BaseModel):
     order_id: str
@@ -28,3 +35,4 @@ class OrderOut(BaseModel):
     payment_status: str
     order_status: str
     created_at: datetime
+

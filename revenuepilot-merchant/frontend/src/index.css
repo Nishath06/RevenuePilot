@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-surface: #0f172a;
+  --color-card: #111827;
+  --color-border: #1e293b;
+  --color-primary: #10b981;
+  --color-accent: #6366f1;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #020617;
+  color: #f1f5f9;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+/* Selection */
+::selection { background: rgba(99, 102, 241, 0.3); color: #e2e8f0; }
+
+/* Glass cards */
+.glass {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 41, 59, 0.8);
+}
+
+/* Glow effects */
+.glow-emerald { box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); }
+.glow-indigo  { box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); }
+.glow-cyan    { box-shadow: 0 0 20px rgba(34, 211, 238, 0.15); }
+
+/* Animated gradient background */
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradientShift 6s ease infinite;
+}
+
+/* KPI card shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Sidebar transition */
+.sidebar-item {
+  transition: all 0.15s ease;
+}
+
+/* Recharts dark overrides */
+.recharts-text { fill: #94a3b8 !important; }
+.recharts-cartesian-axis-tick-value { fill: #64748b !important; }

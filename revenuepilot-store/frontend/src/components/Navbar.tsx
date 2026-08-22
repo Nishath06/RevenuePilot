@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, User as UserIcon, LogOut, Store, LayoutDashboard, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, User as UserIcon, LogOut, Store } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 
@@ -38,18 +38,14 @@ export const Navbar: React.FC = () => {
 
           {/* Navigation Links */}
           <nav className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-600">
-            <Link to="/products" className="hover:text-emerald-600 transition-colors">
-              Products
-            </Link>
-            <Link to="/merchant" className="flex items-center gap-1.5 text-indigo-600 font-semibold hover:text-indigo-700 transition-colors bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">
-              <LayoutDashboard className="w-4 h-4" />
-              Merchant Portal
-            </Link>
+            <Link to="/products" className="hover:text-emerald-600 transition-colors">Products</Link>
+            {isAuthenticated && (
+              <Link to="/orders" className="hover:text-emerald-600 transition-colors">Orders</Link>
+            )}
           </nav>
 
           {/* User & Cart Actions */}
           <div className="flex items-center gap-4">
-            {/* Cart Icon */}
             <Link
               to="/cart"
               className="relative p-2.5 rounded-xl text-slate-700 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
@@ -63,13 +59,9 @@ export const Navbar: React.FC = () => {
               )}
             </Link>
 
-            {/* Auth Buttons */}
             {isAuthenticated ? (
               <div className="flex items-center gap-3">
-                <Link
-                  to="/profile"
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-sm transition-all"
-                >
+                <Link to="/profile" className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-sm transition-all">
                   <UserIcon className="w-4 h-4 text-emerald-600" />
                   <span className="max-w-[100px] truncate">{user?.name || 'Profile'}</span>
                 </Link>
@@ -83,18 +75,8 @@ export const Navbar: React.FC = () => {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Link
-                  to="/login"
-                  className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-emerald-600 transition-colors"
-                >
-                  Log In
-                </Link>
-                <Link
-                  to="/register"
-                  className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md shadow-emerald-600/20 transition-all transform active:scale-95"
-                >
-                  Register
-                </Link>
+                <Link to="/login" className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-emerald-600 transition-colors">Log In</Link>
+                <Link to="/register" className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md shadow-emerald-600/20 transition-all transform active:scale-95">Register</Link>
               </div>
             )}
           </div>

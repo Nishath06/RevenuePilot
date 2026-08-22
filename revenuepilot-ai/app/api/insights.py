@@ -31,16 +31,55 @@ def _build_recommendations(revenue, payments, orders) -> list[str]:
     response_model=InsightResponse,
     summary="Today's business insights",
 )
-async def insights_today(_: str = Depends(verify_api_key)) -> InsightResponse:
-    revenue = await merchant_service.get_revenue_metrics()
-    orders = await merchant_service.get_order_metrics()
-    payments = await merchant_service.get_payment_metrics()
+async def insights_today(
+    fresh: bool = False,
+    _: str = Depends(verify_api_key),
+) -> InsightResponse:
+    import time
+    t0 = time.monotonic()
+
+    revenue = await merchant_service.get_revenue_metrics(fresh=fresh)
+    orders = await merchant_service.get_order_metrics(fresh=fresh)
+    payments = await merchant_service.get_payment_metrics(fresh=fresh)
     customers = await merchant_service.get_customer_metrics()
+
+    elapsed = round((time.monotonic() - t0) * 1000, 1)
+    from app.core.logging import get_logger
+    logger = get_logger(__name__)
+    logger.info(
+        "/insights/today",
+        revenue_today=revenue.today,
+        paid_orders=orders.paid,
+        success_rate=payments.success_rate,
+        failed_payments=payments.failed,
+        elapsed_ms=elapsed,
+        fresh=fresh,
+    )
+
     return InsightResponse(
         period="today",
         revenue=revenue.model_dump(),
-        orders={"today": orders.today, "paid": orders.paid, "pending": orders.pending},
-        payments={"success_rate": payments.success_rate, "failed": payments.failed},
+        orders={
+            "today": orders.today,
+            "paid": orders.paid,
+            "paid_today": orders.paid_today,
+            "pending": orders.pending,
+            "failed": orders.failed,
+            "failed_today": orders.failed_today,
+            "cancelled": orders.cancelled,
+            "cancelled_today": orders.cancelled_today,
+            "total": orders.total,
+        },
+        payments={
+            "success_rate": payments.success_rate,
+            "failure_rate": payments.failure_rate,
+            "failed": payments.failed,
+            "failed_today": payments.failed_today,
+            "cancelled": payments.cancelled,
+            "cancelled_today": payments.cancelled_today,
+            "successful": payments.successful,
+            "total": payments.successful + payments.failed,
+        },
         customers={"abandoned_carts": len(customers.abandoned_carts)},
         recommendations=_build_recommendations(revenue, payments, orders),
     )

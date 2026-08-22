@@ -37,12 +37,13 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:3000",
+        "http://localhost:3001",
         "http://localhost:8000",
         "http://localhost:5173",
     ]
 
     # ── Cache ─────────────────────────────────────────────────────────────────
-    CACHE_TTL_SECONDS: int = 300  # 5 minutes
+    CACHE_TTL_SECONDS: int = 10  # 10 seconds for live merchant data
 
     # ── Store Backend ─────────────────────────────────────────────────────────
     STORE_BACKEND_URL: str = "http://localhost:8000"
