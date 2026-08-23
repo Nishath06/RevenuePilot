@@ -97,10 +97,10 @@ async def insights_week(_: str = Depends(verify_api_key)) -> InsightResponse:
     customers = await merchant_service.get_customer_metrics()
     return InsightResponse(
         period="this_week",
-        revenue={"this_week": revenue.this_week, "growth_percentage": revenue.growth_percentage},
-        orders={"this_week": orders.this_week, "paid": orders.paid},
-        payments={"success_rate": payments.success_rate, "successful": payments.successful},
-        customers={"repeat_customers": customers.repeat_customers},
+        revenue=revenue.model_dump(),
+        orders=orders.model_dump(),
+        payments=payments.model_dump(),
+        customers=customers.model_dump(),
         recommendations=_build_recommendations(revenue, payments, orders),
     )
 
@@ -117,10 +117,10 @@ async def insights_month(_: str = Depends(verify_api_key)) -> InsightResponse:
     customers = await merchant_service.get_customer_metrics()
     return InsightResponse(
         period="this_month",
-        revenue={"this_month": revenue.this_month, "average_order_value": revenue.average_order_value},
-        orders={"total": orders.total, "paid": orders.paid, "cancelled": orders.cancelled},
-        payments={"success_rate": payments.success_rate, "method_breakdown": [m.model_dump() for m in payments.method_breakdown]},
-        customers={"top_customers": len(customers.top_customers), "repeat_rate": customers.repeat_customers},
+        revenue=revenue.model_dump(),
+        orders=orders.model_dump(),
+        payments=payments.model_dump(),
+        customers=customers.model_dump(),
         recommendations=_build_recommendations(revenue, payments, orders),
     )
 

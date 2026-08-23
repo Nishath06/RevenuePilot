@@ -28,9 +28,16 @@ class OrderMetrics(BaseModel):
     cancelled: int = 0
     today: int = 0
     this_week: int = 0
+    this_month: int = 0
     paid_today: int = 0
     failed_today: int = 0
     cancelled_today: int = 0
+    paid_this_week: int = 0
+    failed_this_week: int = 0
+    cancelled_this_week: int = 0
+    paid_this_month: int = 0
+    failed_this_month: int = 0
+    cancelled_this_month: int = 0
 
 
 class PaymentMethodCount(BaseModel):

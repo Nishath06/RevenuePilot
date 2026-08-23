@@ -222,14 +222,57 @@ async def orders_today() -> int:
     return count
 
 
+async def _period_order_count(status: str | None, start_dt: datetime) -> int:
+    start_naive = start_dt.replace(tzinfo=None)
+    col = get_collection("orders")
+    query = {"created_at": {"$gte": start_dt}}
+    if status:
+        query["payment_status"] = status
+    count = await col.count_documents(query)
+    if count == 0:
+        query["created_at"] = {"$gte": start_naive}
+        count = await col.count_documents(query)
+    return count
+
 async def orders_this_week() -> int:
     now = _utc_now()
     week_start = _start_of_day(now) - timedelta(days=now.weekday())
-    col = get_collection("orders")
-    count = await col.count_documents({"created_at": {"$gte": week_start}})
-    if count == 0:
-        count = await col.count_documents({"created_at": {"$gte": week_start.replace(tzinfo=None)}})
-    return count
+    return await _period_order_count(None, week_start)
+
+async def orders_this_month() -> int:
+    now = _utc_now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return await _period_order_count(None, month_start)
+
+async def paid_orders_this_week() -> int:
+    now = _utc_now()
+    week_start = _start_of_day(now) - timedelta(days=now.weekday())
+    return await _period_order_count("Paid", week_start)
+
+async def failed_orders_this_week() -> int:
+    now = _utc_now()
+    week_start = _start_of_day(now) - timedelta(days=now.weekday())
+    return await _period_order_count("Failed", week_start)
+
+async def cancelled_orders_this_week() -> int:
+    now = _utc_now()
+    week_start = _start_of_day(now) - timedelta(days=now.weekday())
+    return await _period_order_count("Cancelled", week_start)
+
+async def paid_orders_this_month() -> int:
+    now = _utc_now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return await _period_order_count("Paid", month_start)
+
+async def failed_orders_this_month() -> int:
+    now = _utc_now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return await _period_order_count("Failed", month_start)
+
+async def cancelled_orders_this_month() -> int:
+    now = _utc_now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return await _period_order_count("Cancelled", month_start)
 
 
 async def get_order_metrics() -> OrderMetrics:
@@ -245,21 +288,36 @@ async def get_order_metrics() -> OrderMetrics:
     failed_today = await failed_orders_today()
     cancelled_today = await cancelled_orders_today()
     this_week = await orders_this_week()
+    this_month = await orders_this_month()
+    paid_this_week = await paid_orders_this_week()
+    failed_this_week = await failed_orders_this_week()
+    cancelled_this_week = await cancelled_orders_this_week()
+    paid_this_month = await paid_orders_this_month()
+    failed_this_month = await failed_orders_this_month()
+    cancelled_this_month = await cancelled_orders_this_month()
+
     elapsed = round((time.monotonic() - t0) * 1000, 1)
     logger.info("get_order_metrics",
-                total=total, paid_today=paid_today, failed_today=failed_today,
+                total=total, paid=paid, paid_today=paid_today, failed_today=failed_today,
                 cancelled_today=cancelled_today, pending=pending, elapsed_ms=elapsed)
     return OrderMetrics(
         total=total,
-        paid=paid_today,
+        paid=paid,
         pending=pending,
         failed=failed,
         cancelled=cancelled,
         today=today,
         this_week=this_week,
+        this_month=this_month,
         paid_today=paid_today,
         failed_today=failed_today,
         cancelled_today=cancelled_today,
+        paid_this_week=paid_this_week,
+        failed_this_week=failed_this_week,
+        cancelled_this_week=cancelled_this_week,
+        paid_this_month=paid_this_month,
+        failed_this_month=failed_this_month,
+        cancelled_this_month=cancelled_this_month,
     )
 
 
