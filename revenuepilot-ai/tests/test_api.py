@@ -19,7 +19,7 @@ def event_loop_policy():
     return asyncio.DefaultEventLoopPolicy()
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def app():
     """Create the FastAPI app with a real MongoDB connection for integration tests."""
     from app.db.mongodb import connect_to_mongodb, close_mongodb_connection
@@ -31,10 +31,18 @@ async def app():
     await close_mongodb_connection()
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def client(app):
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
+    from app.core.config import settings
+    headers = {"X-API-Key": settings.API_KEY}
+    try:
+        from httpx import AsyncClient, ASGITransport
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as ac:
+            yield ac
+    except ImportError:
+        from httpx import AsyncClient
+        async with AsyncClient(app=app, base_url="http://test", headers=headers) as ac:
+            yield ac
 
 
 # ─────────────────────────────────────────────────────────────────────────────

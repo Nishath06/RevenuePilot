@@ -4,23 +4,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Bot, BarChart2, ShoppingBag, CreditCard, Package,
   Users, TrendingUp, AlertCircle, Webhook, Settings, LogOut,
-  ChevronLeft, ChevronRight, Zap,
+  ChevronLeft, ChevronRight, Zap, FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
 const NAV_ITEMS = [
-  { to: '/',           label: 'Dashboard',      icon: LayoutDashboard },
-  { to: '/copilot',   label: 'AI Copilot',      icon: Bot },
-  { to: '/revenue',   label: 'Revenue',          icon: BarChart2 },
-  { to: '/orders',    label: 'Orders',           icon: ShoppingBag },
-  { to: '/payments',  label: 'Payments',         icon: CreditCard },
-  { to: '/inventory', label: 'Inventory',        icon: Package },
-  { to: '/recovery',  label: 'Recovery',         icon: Zap },
-  { to: '/customers', label: 'Customers',        icon: Users },
-  { to: '/forecast',  label: 'Forecasting',      icon: TrendingUp },
-  { to: '/incidents', label: 'Incidents',        icon: AlertCircle },
-  { to: '/webhooks',  label: 'Webhooks',         icon: Webhook },
-  { to: '/settings',  label: 'Settings',         icon: Settings },
+  { to: '/',           label: 'Dashboard',         icon: LayoutDashboard },
+  { to: '/automation', label: 'Automation Center', icon: Zap },
+  { to: '/copilot',    label: 'AI Copilot',         icon: Bot },
+  { to: '/reports',    label: 'Reports Center',     icon: FileText },
+  { to: '/revenue',    label: 'Revenue',            icon: BarChart2 },
+  { to: '/orders',     label: 'Orders',             icon: ShoppingBag },
+  { to: '/payments',   label: 'Payments',           icon: CreditCard },
+  { to: '/inventory',  label: 'Inventory',          icon: Package },
+  { to: '/recovery',   label: 'Recovery',           icon: Zap },
+  { to: '/customers',  label: 'Customers',          icon: Users },
+  { to: '/forecast',   label: 'Forecasting',        icon: TrendingUp },
+  { to: '/incidents',  label: 'Incidents',          icon: AlertCircle },
+  { to: '/webhooks',   label: 'Webhooks',           icon: Webhook },
+  { to: '/settings',   label: 'Settings',           icon: Settings },
 ];
 
 export const Sidebar: React.FC = () => {

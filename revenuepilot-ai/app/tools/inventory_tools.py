@@ -1,10 +1,10 @@
 """
 RevenuePilot AI — Inventory Tools (Agno)
+Exposes product stock, unsold inventory, category health, and warehouse value analytics.
 """
 from __future__ import annotations
 
 from agno.tools import Toolkit
-
 from app.services import analytics
 
 
@@ -17,6 +17,9 @@ class InventoryTools(Toolkit):
         self.register(self.get_out_of_stock_products)
         self.register(self.get_best_selling_products)
         self.register(self.get_slow_selling_products)
+        self.register(self.get_unsold_products_this_month)
+        self.register(self.category_stock_health)
+        self.register(self.inventory_value_report)
         self.register(self.get_category_revenue)
         self.register(self.get_all_inventory_metrics)
 
@@ -39,6 +42,19 @@ class InventoryTools(Toolkit):
         """Return bottom 10 products by units sold."""
         products = await analytics.slow_selling_products()
         return {"slow_selling": [p.model_dump() for p in products]}
+
+    async def get_unsold_products_this_month(self) -> dict:
+        """Return list of products in catalog with 0 sales for the current month."""
+        return await analytics.get_unsold_products_this_month()
+
+    async def category_stock_health(self) -> dict:
+        """Return breakdown by category of total products, low stock, out of stock, and inventory value."""
+        data = await analytics.category_stock_health()
+        return {"category_stock_health": data}
+
+    async def inventory_value_report(self) -> dict:
+        """Return product stock * selling_price report and top inventory value items."""
+        return await analytics.inventory_value_report()
 
     async def get_category_revenue(self) -> dict:
         """Return revenue breakdown by product category."""

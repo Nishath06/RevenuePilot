@@ -1,0 +1,206 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import {
+  FileText, Download, UploadCloud, CheckCircle, Clock, RefreshCw,
+  Search, Filter, Database, Calendar, ShieldCheck, DollarSign, CreditCard, Package, Users, Zap
+} from 'lucide-react';
+import { automationAPI } from '../services/api';
+import { KPICard } from '../components/cards/KPICard';
+
+export const ReportsCenter: React.FC = () => {
+  const [dateRange, setDateRange] = useState('7d');
+  const [reportHistory, setReportHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [activeReport, setActiveReport] = useState<any>(null);
+  const [awsStatus, setAwsStatus] = useState<any>(null);
+
+  const reportCards = [
+    { type: 'revenue', title: 'Revenue Operations Report', icon: DollarSign, color: 'emerald', desc: 'Gross sales, net revenue, refund rates, and daily expansion trends.' },
+    { type: 'payment', title: 'Payment Audit Report', icon: CreditCard, color: 'indigo', desc: 'Razorpay failure breakdowns, gateway latencies, and decline reasons.' },
+    { type: 'inventory', title: 'Inventory Stock Report', icon: Package, color: 'amber', desc: 'Low stock SKUs, stockout velocity, unsold items, and reorder projections.' },
+    { type: 'customer', title: 'Customer Intelligence Report', icon: Users, color: 'sky', desc: 'LTV distribution, VIP buyers, churn risk, and retention benchmarks.' },
+    { type: 'recovery', title: 'Recovery Campaign Report', icon: Zap, color: 'rose', desc: 'Recovered checkout revenue, coupon conversion rates, and SMS/WhatsApp ROI.' },
+    { type: 'security', title: 'Security & Audit Report', icon: ShieldCheck, color: 'violet', desc: 'DevOps audit trails, HMAC signature checks, and JWT auth logs.' },
+  ];
+
+  const loadData = useCallback(async () => {
+    try {
+      const awsRes = await automationAPI.awsHealth().catch(() => ({ data: {} }));
+      setAwsStatus(awsRes.data);
+    } catch (err) {
+      console.error('Failed to load reports metadata', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleGenerate = async (reportType: string, format: string) => {
+    setLoading(true);
+    try {
+      const res = await automationAPI.generateReport({ report_type: reportType, format });
+      setActiveReport(res.data);
+      setReportHistory([res.data, ...reportHistory]);
+    } catch (err) {
+      console.error('Failed to generate report', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8 max-w-screen-xl bg-[#050816] text-slate-100 p-6 rounded-3xl min-h-screen border border-[#00F5A0]/10 shadow-2xl">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E293B] pb-5">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#00F5A0] animate-pulse" />
+            <span className="text-[11px] font-extrabold tracking-widest text-[#00F5A0] uppercase">Automated Cloud Reporting</span>
+          </div>
+          <h1 className="text-3xl font-black text-white flex items-center gap-3">
+            Reports &amp; Intelligence Center
+            <span className={`text-xs px-3 py-1 rounded-full font-bold border ${
+              awsStatus?.has_credentials
+                ? 'bg-[#FF9900]/10 border-[#FF9900]/40 text-[#FF9900]'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            }`}>
+              {awsStatus?.has_credentials ? 'S3 STORED (ap-south-1)' : 'LOCAL STORAGE MODE'}
+            </span>
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">Export financial, inventory, payment, and security audit reports in CSV, JSON, or PDF formats</p>
+        </div>
+
+        {/* Date Filter Bar */}
+        <div className="flex items-center gap-2 bg-[#0B1120] border border-[#1E293B] p-1.5 rounded-2xl text-xs">
+          {[
+            { id: 'today', label: 'Today' },
+            { id: 'yesterday', label: 'Yesterday' },
+            { id: '7d', label: 'Last 7 Days' },
+            { id: '30d', label: 'Last 30 Days' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setDateRange(item.id)}
+              className={`px-3 py-1.5 rounded-xl font-extrabold transition-all ${
+                dateRange === item.id ? 'bg-[#00F5A0] text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Report Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {reportCards.map((card, idx) => {
+          const Icon = card.icon;
+          return (
+            <motion.div
+              key={card.type}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="p-5 bg-[#0B1120] border border-[#1E293B] hover:border-[#00F5A0]/30 rounded-2xl space-y-4 shadow-xl flex flex-col justify-between"
+            >
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="p-2.5 rounded-xl bg-[#00F5A0]/10 text-[#00F5A0] border border-[#00F5A0]/20">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 uppercase font-bold">PDF · CSV · JSON</span>
+                </div>
+                <h3 className="text-sm font-extrabold text-white">{card.title}</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">{card.desc}</p>
+              </div>
+
+              <div className="pt-3 border-t border-[#1E293B] space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => handleGenerate(card.type, 'csv')}
+                    className="py-1.5 bg-[#050816] hover:bg-[#00F5A0]/20 border border-[#1E293B] hover:border-[#00F5A0]/40 text-[#00F5A0] font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1"
+                  >
+                    <Download className="w-3 h-3" /> CSV
+                  </button>
+                  <button
+                    onClick={() => handleGenerate(card.type, 'json')}
+                    className="py-1.5 bg-[#050816] hover:bg-amber-500/20 border border-[#1E293B] hover:border-amber-500/40 text-amber-400 font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1"
+                  >
+                    <Download className="w-3 h-3" /> JSON
+                  </button>
+                  <button
+                    onClick={() => handleGenerate(card.type, 'txt')}
+                    className="py-1.5 bg-[#050816] hover:bg-indigo-500/20 border border-[#1E293B] hover:border-indigo-500/40 text-indigo-400 font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1"
+                  >
+                    <Download className="w-3 h-3" /> PDF
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Generated Report Output Inspector */}
+      {activeReport && (
+        <div className="p-5 bg-[#0B1120] border border-[#00F5A0]/30 rounded-2xl space-y-3 text-xs shadow-2xl">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#00F5A0]" />
+              <span className="font-extrabold text-white text-sm">Generated: {activeReport.filename}</span>
+            </div>
+            <span className="font-mono text-xs text-[#00F5A0] bg-[#00F5A0]/10 px-3 py-1 rounded-full font-bold">
+              {activeReport.record_count} Records Processed
+            </span>
+          </div>
+
+          <pre className="p-4 bg-[#050816] rounded-xl border border-[#1E293B] font-mono text-[11px] text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap">
+            {activeReport.content}
+          </pre>
+        </div>
+      )}
+
+      {/* Report History Table */}
+      <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl overflow-hidden shadow-2xl">
+        <div className="p-5 border-b border-[#1E293B] flex items-center justify-between">
+          <h3 className="text-sm font-extrabold text-white">Generated Reports Audit Log</h3>
+          <span className="text-xs font-mono text-[#00F5A0]">MongoDB Collection: generated_reports</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#1E293B] text-slate-400 uppercase tracking-wider text-[10px]">
+                <th className="px-5 py-3 font-bold">Report ID</th>
+                <th className="px-5 py-3 font-bold">Report Type</th>
+                <th className="px-5 py-3 font-bold">Format</th>
+                <th className="px-5 py-3 font-bold">Storage Target</th>
+                <th className="px-5 py-3 font-bold">Created At</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1E293B]">
+              {reportHistory.length > 0 ? (
+                reportHistory.map((rep, idx) => (
+                  <tr key={rep.report_id || idx} className="hover:bg-white/[0.02]">
+                    <td className="px-5 py-3.5 font-mono text-[#00F5A0] font-bold">{rep.report_id}</td>
+                    <td className="px-5 py-3.5 text-white font-extrabold capitalize">{rep.report_type} Report</td>
+                    <td className="px-5 py-3.5 font-mono text-amber-400 uppercase">{rep.format}</td>
+                    <td className="px-5 py-3.5 text-slate-300 font-mono text-[10px]">{rep.s3_url}</td>
+                    <td className="px-5 py-3.5 text-slate-400">{new Date(rep.created_at).toLocaleString()}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-slate-500 italic">
+                    No reports generated in this session. Click any card above to generate a report.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};

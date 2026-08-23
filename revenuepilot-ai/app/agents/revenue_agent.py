@@ -5,20 +5,19 @@ Specialist agent for all revenue-related questions.
 from __future__ import annotations
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
-
-from app.core.config import settings
+from app.agents.factory import get_llm_model
+from app.llm.provider import BaseLLMProvider
 from app.prompts.system_prompt import SYSTEM_PROMPT
 from app.tools.recommendation_tools import RecommendationTools
 from app.tools.revenue_tools import RevenueTools
 
 
-def build_revenue_agent() -> Agent:
+def build_revenue_agent(provider: BaseLLMProvider | None = None) -> Agent:
     """Build and return the Revenue specialist agent."""
     return Agent(
         name="Revenue Agent",
         role="Expert in revenue analysis, growth trends, and sales performance metrics.",
-        model=OpenAIChat(id=settings.OPENAI_MODEL, api_key=settings.OPENAI_API_KEY),
+        model=get_llm_model(provider),
         tools=[RevenueTools(), RecommendationTools()],
         instructions=[
             SYSTEM_PROMPT,

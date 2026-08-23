@@ -28,10 +28,16 @@ async def health() -> HealthResponse:
     mongo_ok = await mongo_health()
     coordinator = get_coordinator()
 
+    provider_name = coordinator.provider.name if (coordinator and coordinator.provider) else (settings.LLM_PROVIDER or "grok")
+    llm_status = "connected" if (coordinator and coordinator.ai_ready) else "degraded"
+
     return HealthResponse(
         status="healthy" if mongo_ok else "degraded",
         mongodb="connected" if mongo_ok else "disconnected",
-        ai_ready=coordinator.ai_ready,
+        llm_provider=provider_name,
+        llm_status=llm_status,
+        analytics_engine="ready",
+        ai_ready=coordinator.ai_ready if coordinator else False,
         version=settings.VERSION,
         environment=settings.ENVIRONMENT,
         uptime_seconds=round(time.monotonic() - _start_time, 1),

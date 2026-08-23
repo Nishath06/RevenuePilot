@@ -126,3 +126,55 @@ export const InventoryBarChart: React.FC<{ data: any[]; loading?: boolean }> = (
     </ResponsiveContainer>
   );
 };
+
+// ── Generic Line Chart ─────────────────────────────────────────────────────────
+export const GenericLineChart: React.FC<{ data: any[]; xKey: string; dataKey: string; stroke?: string; loading?: boolean }> = ({ data, xKey, dataKey, stroke = COLORS.emerald, loading }) => {
+  if (loading) return <div className="skeleton h-64 rounded-2xl" />;
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <LineChart data={data} margin={{ top: 5, right: 15, bottom: 0, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+        <XAxis dataKey={xKey} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+          tickFormatter={(v: number) => v >= 1000 ? `₹${(v / 1000).toFixed(0)}k` : `₹${v}`} />
+        <Tooltip {...DARK_TOOLTIP} formatter={(v: unknown) => [`₹${(v as number).toLocaleString('en-IN')}`, 'Revenue']} />
+        <Line type="monotone" dataKey={dataKey} stroke={stroke} strokeWidth={2.5} dot={{ r: 4, fill: stroke }} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+};
+
+// ── Heatmap Bar Chart (Weekday Mon-Sun) ───────────────────────────────────────
+export const HeatmapBarChart: React.FC<{ data: any[]; loading?: boolean }> = ({ data, loading }) => {
+  if (loading) return <div className="skeleton h-48 rounded-2xl" />;
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+        <XAxis dataKey="weekday" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+          tickFormatter={(v: number) => v >= 1000 ? `₹${(v / 1000).toFixed(0)}k` : `₹${v}`} />
+        <Tooltip {...DARK_TOOLTIP} formatter={(v: unknown) => [`₹${(v as number).toLocaleString('en-IN')}`, 'Revenue']} />
+        <Bar dataKey="revenue" name="Revenue" fill={COLORS.indigo} radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+// ── Hourly Bar Chart (24-Hour) ────────────────────────────────────────────────
+export const HourlyBarChart: React.FC<{ data: any[]; loading?: boolean }> = ({ data, loading }) => {
+  if (loading) return <div className="skeleton h-48 rounded-2xl" />;
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+        <XAxis dataKey="hour" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} interval={2} />
+        <YAxis tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false}
+          tickFormatter={(v: number) => `₹${v}`} />
+        <Tooltip {...DARK_TOOLTIP} formatter={(v: unknown) => [`₹${(v as number).toLocaleString('en-IN')}`, 'Hourly Rev']} />
+        <Bar dataKey="revenue" name="Hourly Revenue" fill={COLORS.cyan} radius={[2, 2, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+

@@ -25,12 +25,21 @@ class Settings(BaseSettings):
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "revenuepilot_store"
 
-    # ── OpenAI / LLM ─────────────────────────────────────────────────────────
+    # ── LLM / Gemini / Grok / OpenAI ──────────────────────────────────────────
+    LLM_PROVIDER: str = "gemini"
+    AI_PROVIDER: str = "gemini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.6-flash"
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    GROK_API_KEY: str = ""
+    GROK_MODEL: str = "grok-4-fast"
+    GROK_BASE_URL: str = "https://api.groq.com/openai/v1"
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # ── Auth ──────────────────────────────────────────────────────────────────
     API_SECRET_KEY: str = "revenuepilot_ai_secret_key_2026"
+    API_KEY: str = "revenuepilot_ai_secret_key_2026"
     JWT_SECRET: str = "supersecretjwtkey_revenuepilot_2026_hackathon"
     JWT_ALGORITHM: str = "HS256"
 
@@ -44,6 +53,16 @@ class Settings(BaseSettings):
 
     # ── Cache ─────────────────────────────────────────────────────────────────
     CACHE_TTL_SECONDS: int = 10  # 10 seconds for live merchant data
+
+    # ── AWS EventBridge / SNS / Lambda ────────────────────────────────────────
+    AWS_REGION: str = "ap-south-1"
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    EVENT_BUS_NAME: str = "revenuepilot-event-bus"
+    AWS_SNS_TOPIC_ARN_PAYMENTS: str = ""
+    AWS_SNS_TOPIC_ARN_INVENTORY: str = ""
+    AWS_SNS_TOPIC_ARN_INCIDENTS: str = ""
+    AWS_LAMBDA_RECOVERY_NAME: str = "revenuepilot-recovery-lambda"
 
     # ── Store Backend ─────────────────────────────────────────────────────────
     STORE_BACKEND_URL: str = "http://localhost:8000"

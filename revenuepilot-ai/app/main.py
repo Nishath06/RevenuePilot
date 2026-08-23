@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.agents.coordinator import get_coordinator
-from app.api import chat, health, insights, merchant
+from app.api import automation, chat, health, insights, merchant
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
 from app.db.mongodb import connect_to_mongodb, close_mongodb_connection
@@ -38,10 +38,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Connect to MongoDB
     await connect_to_mongodb()
 
-    # Initialize coordinator (builds agents if OpenAI key available)
-    get_coordinator()
+    # Initialize coordinator (builds agents based on active provider)
+    coord = get_coordinator()
 
-    logger.info("RevenuePilot AI is ready", ai_enabled=bool(settings.OPENAI_API_KEY))
+    logger.info("RevenuePilot AI is ready", provider=coord.provider.name if coord.provider else settings.LLM_PROVIDER, ai_ready=coord.ai_ready)
 
     yield
 
@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(insights.router)
     app.include_router(merchant.router)
+    app.include_router(automation.router)
 
     # ── Root ────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)

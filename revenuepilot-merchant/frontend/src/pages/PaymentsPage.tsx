@@ -65,6 +65,47 @@ export const PaymentsPage: React.FC = () => {
         </button>
       </div>
 
+      {/* Task 10 — Immutable Payment State Machine Diagram */}
+      <div className="bg-[#111827] rounded-2xl border border-[#1E293B] p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              Immutable Payment State Machine Architecture
+              <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-extrabold">
+                Strict Guard Enforced
+              </span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">Terminal states (PAID, FAILED, CANCELLED) cannot be overwritten by subsequent webhooks</p>
+          </div>
+          <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-full font-bold">
+            State Lock Active
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="p-3 bg-[#161F30] rounded-xl border border-[#1E293B] flex flex-col items-center text-center space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Stage 1</span>
+            <p className="text-xs font-bold text-white">CREATED</p>
+            <p className="text-[10px] text-slate-400 font-mono">Order initialized in DB</p>
+          </div>
+          <div className="p-3 bg-[#161F30] rounded-xl border border-[#1E293B] flex flex-col items-center text-center space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Stage 2</span>
+            <p className="text-xs font-bold text-indigo-400">AUTHORIZING</p>
+            <p className="text-[10px] text-slate-400 font-mono">Razorpay modal open</p>
+          </div>
+          <div className="p-3 bg-[#161F30] rounded-xl border border-emerald-500/30 flex flex-col items-center text-center space-y-1">
+            <span className="text-[10px] font-bold text-emerald-400 uppercase">Terminal State A</span>
+            <p className="text-xs font-extrabold text-emerald-400">PAID / CAPTURED</p>
+            <p className="text-[10px] text-emerald-300/70 font-mono">Immutable ✅</p>
+          </div>
+          <div className="p-3 bg-[#161F30] rounded-xl border border-rose-500/30 flex flex-col items-center text-center space-y-1">
+            <span className="text-[10px] font-bold text-rose-400 uppercase">Terminal State B</span>
+            <p className="text-xs font-extrabold text-rose-400">FAILED / CANCELLED</p>
+            <p className="text-[10px] text-rose-300/70 font-mono">Immutable 🔒</p>
+          </div>
+        </div>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard label="Success Rate" value={`${(pay.success_rate ?? 0).toFixed(1)}%`} icon={CheckCircle} color={(pay.success_rate ?? 100) >= 90 ? 'emerald' : 'rose'} loading={loading} index={0} />

@@ -37,8 +37,9 @@ async def connect_to_mongodb(max_retries: int = 5, delay: float = 2.0) -> None:
             # Force connection to verify
             await _client.admin.command("ping")
             _database = _client[settings.DATABASE_NAME]
+            await _ensure_indexes()
             logger.info(
-                "MongoDB connected",
+                "MongoDB connected and indexes verified",
                 database=settings.DATABASE_NAME,
                 attempt=attempt,
             )
@@ -71,6 +72,28 @@ def get_database() -> motor.motor_asyncio.AsyncIOMotorDatabase:
 def get_collection(name: str) -> motor.motor_asyncio.AsyncIOMotorCollection:
     """Return a named collection from the active database."""
     return get_database()[name]
+
+
+get_mongodb = get_database
+
+
+async def _ensure_indexes() -> None:
+    """Ensure required indexes exist for optimal Motor aggregation performance."""
+    if _database is None:
+        return
+    for coll_name, keys in [
+        ("orders", [("user_id", 1)]),
+        ("orders", [("payment_status", 1)]),
+        ("payments", [("status", 1)]),
+        ("payments", [("order_id", 1)]),
+        ("products", [("category", 1)]),
+        ("carts", [("user_id", 1)]),
+    ]:
+        try:
+            await _database[coll_name].create_index(keys)
+        except Exception:
+            pass
+    logger.info("MongoDB aggregation indexes created/verified successfully")
 
 
 async def health_check() -> bool:

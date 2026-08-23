@@ -5,19 +5,18 @@ Specialist agent for product stock intelligence.
 from __future__ import annotations
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
-
-from app.core.config import settings
+from app.agents.factory import get_llm_model
+from app.llm.provider import BaseLLMProvider
 from app.prompts.system_prompt import SYSTEM_PROMPT
 from app.tools.inventory_tools import InventoryTools
 from app.tools.recommendation_tools import RecommendationTools
 
 
-def build_inventory_agent() -> Agent:
+def build_inventory_agent(provider: BaseLLMProvider | None = None) -> Agent:
     return Agent(
         name="Inventory Agent",
         role="Expert in product stock levels, bestseller rankings, and category performance.",
-        model=OpenAIChat(id=settings.OPENAI_MODEL, api_key=settings.OPENAI_API_KEY),
+        model=get_llm_model(provider),
         tools=[InventoryTools(), RecommendationTools()],
         instructions=[
             SYSTEM_PROMPT,

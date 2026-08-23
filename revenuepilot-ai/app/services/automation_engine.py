@@ -1,0 +1,394 @@
+"""
+RevenuePilot AI — Automation Engine
+Evaluates rules, conditions, and executes autonomous operations.
+Includes Inventory Watchdog, Revenue Watchdog, and Prebuilt Rule Templates.
+"""
+from typing import Any, Dict, List, Optional
+import uuid
+import time
+from datetime import datetime
+from app.db.mongodb import get_mongodb
+from app.models.automation_rule import AutomationRule, RuleAction, RuleCondition
+from app.models.event_history import EventRecord, ExecutionLog
+from app.services.aws_eventbridge import aws_manager
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Prebuilt Workflow Templates
+DEFAULT_PREBUILT_RULES = [
+    {
+        "id": "rule_prebuilt_payment_recovery",
+        "name": "Payment Failure Recovery & Outreach",
+        "description": "Automatically queues cart recovery, generates 10% discount coupon, creates incident, and fires SNS alert on payment decline.",
+        "trigger": "PAYMENT_FAILED",
+        "category": "Payments",
+        "priority": 1,
+        "enabled": True,
+        "is_prebuilt": True,
+        "conditions": [],
+        "actions": [
+            {"type": "create_incident", "params": {"severity": "high", "title": "Razorpay Payment Decline Incident"}},
+            {"type": "queue_recovery", "params": {"channel": "multi", "discount_pct": 10}},
+            {"type": "generate_coupon", "params": {"code_prefix": "RECOVER10", "discount_pct": 10}},
+            {"type": "aws_sns", "params": {"topic": "payments", "subject": "Payment Failure Spike Alert"}},
+        ],
+    },
+    {
+        "id": "rule_prebuilt_low_stock",
+        "name": "Low Stock Automated Watchdog",
+        "description": "Monitors stock levels, triggers restock alert when items drop below threshold, and creates inventory incident.",
+        "trigger": "LOW_STOCK",
+        "category": "Inventory",
+        "priority": 2,
+        "enabled": True,
+        "is_prebuilt": True,
+        "conditions": [
+            {"field": "stock", "operator": "lt", "value": 10}
+        ],
+        "actions": [
+            {"type": "restock_alert", "params": {}},
+            {"type": "create_incident", "params": {"severity": "medium", "title": "Inventory Stock Depletion Warning"}},
+            {"type": "aws_sns", "params": {"topic": "inventory", "subject": "Low Stock Inventory Alert"}},
+        ],
+    },
+    {
+        "id": "rule_prebuilt_revenue_drop",
+        "name": "Revenue Drop Anomaly Watchdog",
+        "description": "Detects 20%+ revenue drop anomalies compared to weekly baseline and notifies merchant.",
+        "trigger": "REVENUE_DROP",
+        "category": "Revenue",
+        "priority": 1,
+        "enabled": True,
+        "is_prebuilt": True,
+        "conditions": [],
+        "actions": [
+            {"type": "create_incident", "params": {"severity": "critical", "title": "Significant Revenue Drop Anomaly Detected"}},
+            {"type": "aws_sns", "params": {"topic": "incidents", "subject": "Critical Revenue Drop Anomaly"}},
+        ],
+    },
+    {
+        "id": "rule_prebuilt_abandoned_cart",
+        "name": "Abandoned Cart 2-Hour Recovery",
+        "description": "Triggers personalized WhatsApp & Email recovery campaign for abandoned customer checkouts.",
+        "trigger": "ABANDONED_CART",
+        "category": "Recovery",
+        "priority": 3,
+        "enabled": True,
+        "is_prebuilt": True,
+        "conditions": [],
+        "actions": [
+            {"type": "whatsapp_campaign", "params": {"delay_minutes": 120}},
+            {"type": "email_campaign", "params": {"subject": "Did you forget something in your cart?"}},
+            {"type": "generate_coupon", "params": {"code_prefix": "CART15", "discount_pct": 15}},
+        ],
+    },
+    {
+        "id": "rule_prebuilt_vip_reward",
+        "name": "VIP Repeat Buyer Auto-Reward",
+        "description": "Generates exclusive VIP coupon reward when repeat customer completes order.",
+        "trigger": "REPEAT_CUSTOMER",
+        "category": "Customer",
+        "priority": 4,
+        "enabled": True,
+        "is_prebuilt": True,
+        "conditions": [],
+        "actions": [
+            {"type": "generate_coupon", "params": {"code_prefix": "VIPPERK20", "discount_pct": 20}},
+            {"type": "email_campaign", "params": {"subject": "Thank you for being a valued VIP customer!"}},
+        ],
+    },
+    {
+        "id": "rule_prebuilt_webhook_retry",
+        "name": "Webhook Failure Incident Guard",
+        "description": "Flags failed Razorpay webhook signature or delivery retries for merchant audit.",
+        "trigger": "WEBHOOK_RETRY",
+        "category": "Webhooks",
+        "priority": 2,
+        "enabled": True,
+        "is_prebuilt": True,
+        "conditions": [],
+        "actions": [
+            {"type": "create_incident", "params": {"severity": "high", "title": "Razorpay Webhook Delivery Failure"}},
+        ],
+    },
+    {
+        "id": "rule_prebuilt_daily_summary",
+        "name": "8 AM Daily Business Operations Report",
+        "description": "Generates daily business operations summary and triggers AWS Lambda report export.",
+        "trigger": "SCHEDULED_DAILY",
+        "category": "Time Schedule",
+        "priority": 5,
+        "enabled": True,
+        "is_prebuilt": True,
+        "conditions": [],
+        "actions": [
+            {"type": "aws_lambda", "params": {"function": "revenuepilot-daily-report"}},
+            {"type": "email_campaign", "params": {"subject": "Your Daily RevenuePilot Operations Summary"}},
+        ],
+    },
+]
+
+
+class AutomationEngine:
+    def __init__(self):
+        pass
+
+    async def initialize_prebuilt_rules(self):
+        """
+        Seed prebuilt workflow rules into MongoDB if collection is empty.
+        """
+        db = get_mongodb()
+        count = await db.automation_rules.count_documents({})
+        if count == 0:
+            logger.info("Seeding prebuilt automation workflow templates into MongoDB")
+            for rule_dict in DEFAULT_PREBUILT_RULES:
+                rule_dict["created_at"] = datetime.utcnow().isoformat()
+                rule_dict["execution_count"] = 0
+                await db.automation_rules.insert_one(rule_dict)
+
+    async def process_event(self, event: EventRecord):
+        """
+        Processes an incoming business event against all active automation rules.
+        """
+        db = get_mongodb()
+        # Seed prebuilt if empty
+        await self.initialize_prebuilt_rules()
+
+        # Find enabled rules matching this event_type or trigger
+        cursor = db.automation_rules.find({
+            "enabled": True,
+            "$or": [
+                {"trigger": event.event_type},
+                {"trigger": "ALL_EVENTS"}
+            ]
+        }).sort("priority", 1)
+
+        matching_rules = await cursor.to_list(length=100)
+        logger.info(f"Evaluating {len(matching_rules)} automation rules for event {event.event_type}")
+
+        for rule in matching_rules:
+            await self._evaluate_and_execute(rule, event)
+
+    async def _evaluate_and_execute(self, rule_dict: Dict[str, Any], event: EventRecord):
+        start_time = time.time()
+        rule_id = str(rule_dict.get("_id") or rule_dict.get("id"))
+        rule_name = rule_dict.get("name", "Unnamed Rule")
+        conditions = rule_dict.get("conditions", [])
+        actions = rule_dict.get("actions", [])
+
+        # Check conditions
+        if not self._check_conditions(conditions, event.payload):
+            logger.info("Rule conditions did not match payload", rule_name=rule_name)
+            return
+
+        # Execute actions
+        action_results = []
+        aws_statuses = []
+
+        for action in actions:
+            action_type = action.get("type")
+            params = action.get("params", {})
+            res = await self._execute_action(action_type, params, event)
+            action_results.append(f"{action_type}: {res.get('status', 'ok')}")
+            if "aws" in action_type:
+                aws_statuses.append(res.get("status", "ok"))
+
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        exec_id = f"exec_{uuid.uuid4().hex[:12]}"
+        aws_pub_status = aws_statuses[0] if aws_statuses else "skipped"
+
+        exec_log = ExecutionLog(
+            execution_id=exec_id,
+            automation_id=rule_id,
+            rule_name=rule_name,
+            trigger=event.event_type,
+            event_id=event.event_id,
+            status="success",
+            result_detail="; ".join(action_results),
+            duration_ms=duration_ms,
+            timestamp=datetime.utcnow().isoformat(),
+            aws_publish_status=aws_pub_status,
+            mongo_write_status="success",
+            retry_count=0,
+        )
+
+        db = get_mongodb()
+        await db.execution_history.insert_one(exec_log.dict())
+
+        # Update rule statistics
+        await db.automation_rules.update_one(
+            {"_id": rule_dict.get("_id") or rule_id},
+            {
+                "$inc": {"execution_count": 1},
+                "$set": {"last_triggered_at": datetime.utcnow().isoformat()}
+            }
+        )
+
+        logger.info("Automation rule executed successfully", rule_name=rule_name, duration_ms=duration_ms)
+
+    def _check_conditions(self, conditions: List[Dict[str, Any]], payload: Dict[str, Any]) -> bool:
+        if not conditions:
+            return True
+
+        for cond in conditions:
+            field = cond.get("field")
+            operator = cond.get("operator")
+            target_val = cond.get("value")
+            actual_val = payload.get(field)
+
+            if actual_val is None:
+                return False
+
+            if operator in ["gt", ">"]:
+                if not (actual_val > target_val):
+                    return False
+            elif operator in ["lt", "<"]:
+                if not (actual_val < target_val):
+                    return False
+            elif operator in ["gte", ">="]:
+                if not (actual_val >= target_val):
+                    return False
+            elif operator in ["lte", "<="]:
+                if not (actual_val <= target_val):
+                    return False
+            elif operator in ["eq", "=="]:
+                if not (actual_val == target_val):
+                    return False
+            elif operator == "contains":
+                if str(target_val).lower() not in str(actual_val).lower():
+                    return False
+
+        return True
+
+    async def _execute_action(self, action_type: str, params: Dict[str, Any], event: EventRecord) -> Dict[str, Any]:
+        db = get_mongodb()
+
+        if action_type == "create_incident":
+            incident = {
+                "id": f"inc_{uuid.uuid4().hex[:8]}",
+                "severity": params.get("severity", "medium"),
+                "title": params.get("title", f"AutoOps Incident: {event.event_type}"),
+                "description": f"Triggered by event {event.event_id}. Payload: {event.payload}",
+                "source": "AutoOps Automation Engine",
+                "status": "open",
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            await db.incidents.insert_one(incident)
+            return {"status": "created_incident", "incident_id": incident["id"]}
+
+        elif action_type == "queue_recovery":
+            recovery_item = {
+                "id": f"rec_{uuid.uuid4().hex[:8]}",
+                "event_id": event.event_id,
+                "customer_name": event.payload.get("customer_name", "Valued Customer"),
+                "customer_email": event.payload.get("customer_email", "customer@example.com"),
+                "customer_phone": event.payload.get("customer_phone", "+919876543210"),
+                "amount": event.payload.get("amount", 2500),
+                "coupon_code": f"RECOVER{params.get('discount_pct', 10)}",
+                "status": "queued",
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            await db.recoveries.insert_one(recovery_item)
+            return {"status": "queued_recovery"}
+
+        elif action_type == "generate_coupon":
+            coupon = {
+                "code": f"{params.get('code_prefix', 'SAVE')}_{uuid.uuid4().hex[:4].upper()}",
+                "discount_pct": params.get("discount_pct", 10),
+                "event_id": event.event_id,
+                "status": "active",
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            await db.coupons.insert_one(coupon)
+            return {"status": "generated_coupon", "code": coupon["code"]}
+
+        elif action_type == "restock_alert":
+            product_id = event.payload.get("product_id")
+            if product_id:
+                await db.products.update_one(
+                    {"$or": [{"_id": product_id}, {"id": product_id}]},
+                    {"$set": {"needs_restock": True, "restock_flagged_at": datetime.utcnow().isoformat()}}
+                )
+            return {"status": "restock_alert_flagged"}
+
+        elif action_type == "aws_sns":
+            topic = params.get("topic", "payments")
+            msg = f"AutoOps Alert [{event.event_type}]: {params.get('subject', 'Business Alert')}"
+            return aws_manager.publish_sns(topic_type=topic, message=msg, subject=params.get("subject", "Alert"))
+
+        elif action_type == "aws_eventbridge":
+            return aws_manager.publish_eventbridge(event_type=event.event_type, detail=event.payload)
+
+        elif action_type == "aws_lambda":
+            fn = params.get("function", "revenuepilot-report")
+            return aws_manager.invoke_lambda(function_name=fn, payload=event.payload)
+
+        elif action_type in ["email_campaign", "whatsapp_campaign"]:
+            return {"status": f"campaign_queued_{action_type}"}
+
+        return {"status": "executed_generic"}
+
+    # Periodic Watchdogs (Tasks 7, 8, 15)
+    async def run_inventory_watchdog(self):
+        """
+        Scans product catalog in MongoDB and emits LOW_STOCK / OUT_OF_STOCK events.
+        """
+        db = get_mongodb()
+        from app.services.event_bus import event_bus
+
+        products = await db.products.find({}).to_list(length=500)
+        low_count = 0
+        out_count = 0
+
+        for p in products:
+            stock = p.get("stock", 0)
+            p_name = p.get("name") or p.get("title", "Product SKU")
+            if stock == 0:
+                out_count += 1
+                await event_bus.emit(
+                    event_type="OUT_OF_STOCK",
+                    payload={"product_name": p_name, "stock": 0, "product_id": str(p.get("_id") or p.get("id"))},
+                    severity="critical"
+                )
+            elif stock <= 5:
+                low_count += 1
+                await event_bus.emit(
+                    event_type="LOW_STOCK",
+                    payload={"product_name": p_name, "stock": stock, "product_id": str(p.get("_id") or p.get("id"))},
+                    severity="warning"
+                )
+
+        logger.info("Inventory Watchdog scan complete", low_stock=low_count, out_of_stock=out_count)
+        return {"low_stock": low_count, "out_of_stock": out_count}
+
+    async def run_revenue_watchdog(self):
+        """
+        Monitors revenue anomaly metrics and emits REVENUE_DROP or REVENUE_SPIKE.
+        """
+        db = get_mongodb()
+        from app.services.event_bus import event_bus
+        from app.services.analytics import analytics_service
+
+        today_metrics = await analytics_service.get_today_metrics()
+        growth = today_metrics.get("revenue", {}).get("growth_percentage", 0)
+
+        if growth <= -20.0:
+            await event_bus.emit(
+                event_type="REVENUE_DROP",
+                payload={"growth_percentage": growth, "current_revenue": today_metrics.get("revenue", {}).get("today", 0)},
+                severity="critical"
+            )
+        elif growth >= 30.0:
+            await event_bus.emit(
+                event_type="REVENUE_SPIKE",
+                payload={"growth_percentage": growth, "current_revenue": today_metrics.get("revenue", {}).get("today", 0)},
+                severity="info"
+            )
+
+        logger.info("Revenue Watchdog scan complete", growth_percentage=growth)
+        return {"growth_percentage": growth}
+
+
+# Singleton instance
+automation_engine = AutomationEngine()

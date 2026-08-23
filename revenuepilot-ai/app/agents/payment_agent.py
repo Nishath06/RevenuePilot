@@ -5,19 +5,18 @@ Specialist agent for Razorpay payment analytics.
 from __future__ import annotations
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
-
-from app.core.config import settings
+from app.agents.factory import get_llm_model
+from app.llm.provider import BaseLLMProvider
 from app.prompts.system_prompt import SYSTEM_PROMPT
 from app.tools.payment_tools import PaymentTools
 from app.tools.recommendation_tools import RecommendationTools
 
 
-def build_payment_agent() -> Agent:
+def build_payment_agent(provider: BaseLLMProvider | None = None) -> Agent:
     return Agent(
         name="Payment Agent",
         role="Expert in Razorpay payment analytics, failure analysis, and method optimization.",
-        model=OpenAIChat(id=settings.OPENAI_MODEL, api_key=settings.OPENAI_API_KEY),
+        model=get_llm_model(provider),
         tools=[PaymentTools(), RecommendationTools()],
         instructions=[
             SYSTEM_PROMPT,
