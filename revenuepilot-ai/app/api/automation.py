@@ -5,7 +5,7 @@ Production REST APIs for Business Automations, EventBus, AWS Integrations, and T
 from typing import Any, Dict, List, Optional
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from app.db.mongodb import get_mongodb
 from app.models.automation_rule import AutomationRule, AutomationRuleCreate
 from app.services.event_bus import event_bus
@@ -254,12 +254,52 @@ async def get_security_performance():
 @router.post("/reports/generate")
 async def generate_report(payload: Dict[str, Any]):
     """
-    Task 8 — Generate operational report (CSV, JSON, PDF/TXT).
+    Task 8 — Generate operational report (CSV, JSON, PDF/TXT) filtered by date_range.
     """
     rtype = payload.get("report_type", "revenue")
     fmt = payload.get("format", "csv")
-    rep = await reports_service.generate_report(report_type=rtype, format_type=fmt)
+    drange = payload.get("date_range", "7d")
+    rep = await reports_service.generate_report(report_type=rtype, format_type=fmt, date_range=drange)
     return rep
+
+
+@router.get("/reports/history")
+async def get_reports_history(limit: int = 50):
+    """
+    Retrieves generated operational reports history.
+    """
+    reports = await reports_service.get_reports_history(limit=limit)
+    return {"reports": reports, "count": len(reports)}
+
+
+@router.get("/reports/download/{filename}")
+async def download_report_file(filename: str):
+    """
+    Direct endpoint to download generated report file.
+    """
+    report = await reports_service.get_report_by_id_or_filename(filename)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report file not found")
+
+    content = report.get("content", "")
+    fmt = str(report.get("format", "csv")).lower()
+
+    media_map = {
+        "csv": "text/csv",
+        "json": "application/json",
+        "pdf": "text/plain",
+        "txt": "text/plain",
+    }
+    media_type = media_map.get(fmt, "text/plain")
+
+    return Response(
+        content=content.encode("utf-8") if isinstance(content, str) else content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
 
 
 @router.get("/dlq")

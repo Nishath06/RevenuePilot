@@ -16,38 +16,61 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+from datetime import datetime, timedelta
+
 class ReportsService:
     def __init__(self):
         pass
 
-    async def generate_report(self, report_type: str, format_type: str = "csv") -> Dict[str, Any]:
+    async def generate_report(self, report_type: str, format_type: str = "csv", date_range: str = "7d") -> Dict[str, Any]:
         """
-        Task 8 — Generates operational report file in CSV, JSON, or TXT format.
+        Task 8 — Generates operational report file in CSV, JSON, or TXT format based on date filter.
         """
         db = get_mongodb()
         now_str = datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
-        filename = f"revenuepilot_{report_type}_{now_str}.{format_type}"
+        ext = "txt" if format_type.lower() in ["pdf", "txt"] else format_type.lower()
+        filename = f"revenuepilot_{report_type}_{date_range}_{now_str}.{ext}"
+
+        # Compute date cutoff
+        now = datetime.utcnow()
+        if date_range == "today":
+            cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif date_range == "yesterday":
+            cutoff = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        elif date_range == "30d":
+            cutoff = now - timedelta(days=30)
+        else:  # default 7d
+            cutoff = now - timedelta(days=7)
+
+        cutoff_iso = cutoff.isoformat()
+
+        # Build collection query
+        query = {}
+        # Try fetching with date filter first
+        date_query = {"$or": [{"created_at": {"$gte": cutoff_iso}}, {"timestamp": {"$gte": cutoff_iso}}]}
 
         # Fetch data based on report type
-        if report_type == "revenue":
-            data = await db.orders.find({"status": "paid"}, {"_id": 0}).to_list(length=200)
-        elif report_type == "payment":
-            data = await db.payments.find({}, {"_id": 0}).to_list(length=200)
-        elif report_type == "inventory":
-            data = await db.products.find({}, {"_id": 0}).to_list(length=200)
-        elif report_type == "customer":
-            data = await db.customers.find({}, {"_id": 0}).to_list(length=200)
-        elif report_type == "recovery":
-            data = await db.recoveries.find({}, {"_id": 0}).to_list(length=200)
-        elif report_type == "automation":
-            data = await db.execution_history.find({}, {"_id": 0}).to_list(length=200)
-        elif report_type == "incident":
-            data = await db.incidents.find({}, {"_id": 0}).to_list(length=200)
-        else:
-            data = await db.events.find({}, {"_id": 0}).to_list(length=200)
+        col_map = {
+            "revenue": db.orders,
+            "payment": db.payments,
+            "inventory": db.products,
+            "customer": db.customers,
+            "recovery": db.recoveries,
+            "automation": db.execution_history,
+            "incident": db.incidents,
+            "security": db.audit_logs,
+        }
+        col = col_map.get(report_type, db.events)
+
+        try:
+            data = await col.find(date_query, {"_id": 0}).to_list(length=200)
+            if not data:
+                data = await col.find({}, {"_id": 0}).to_list(length=200)
+        except Exception:
+            data = await col.find({}, {"_id": 0}).to_list(length=200)
 
         content = ""
-        if format_type == "csv":
+        if ext == "csv":
             if data:
                 keys = list(data[0].keys())
                 output = io.StringIO()
@@ -57,12 +80,19 @@ class ReportsService:
                     writer.writerow({k: str(v) for k, v in row.items()})
                 content = output.getvalue()
             else:
-                content = "id,status,created_at\n1,no_data,now"
-        elif format_type == "json":
+                content = "id,status,created_at,date_range\n1,no_data,now," + date_range
+        elif ext == "json":
             content = json.dumps(data, indent=2, default=str)
         else:
-            content = f"--- REVENUEPILOT {report_type.upper()} REPORT ---\nGenerated: {datetime.utcnow().isoformat()}\nTotal Records: {len(data)}\n\n"
-            content += json.dumps(data[:10], indent=2, default=str)
+            content = f"========================================================================\n"
+            content += f" REVENUEPILOT ENTERPRISE OPERATIONAL REPORT ({report_type.upper()})\n"
+            content += f"========================================================================\n"
+            content += f"Generated At : {datetime.utcnow().isoformat()} UTC\n"
+            content += f"Date Range   : {date_range.upper()}\n"
+            content += f"Total Records: {len(data)}\n"
+            content += f"Storage Path : local://reports/{filename}\n"
+            content += f"------------------------------------------------------------------------\n\n"
+            content += json.dumps(data, indent=2, default=str)
 
         # Upload to S3 if AWS credentials exist
         s3_url = f"local://reports/{filename}"
@@ -74,6 +104,7 @@ class ReportsService:
             "report_id": f"rep_{uuid.uuid4().hex[:8]}",
             "report_type": report_type,
             "format": format_type,
+            "date_range": date_range,
             "filename": filename,
             "record_count": len(data),
             "created_at": datetime.utcnow().isoformat(),
@@ -82,8 +113,27 @@ class ReportsService:
             "content": content,
         }
 
-        await db.reports.insert_one({**report_record, "content": content})
+        await db.reports.insert_one(report_record)
         return report_record
+
+    async def get_reports_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Retrieves generated report audit trail.
+        """
+        db = get_mongodb()
+        cursor = db.reports.find({}, {"_id": 0}).sort("created_at", -1).limit(limit)
+        return await cursor.to_list(length=limit)
+
+    async def get_report_by_id_or_filename(self, identifier: str) -> Optional[Dict[str, Any]]:
+        """
+        Finds a report document by report_id or filename.
+        """
+        db = get_mongodb()
+        rep = await db.reports.find_one(
+            {"$or": [{"report_id": identifier}, {"filename": identifier}]},
+            {"_id": 0}
+        )
+        return rep
 
 
 reports_service = ReportsService()

@@ -92,6 +92,7 @@ export const automationAPI = {
   cicd: () => aiClient.get('/automation/cicd'),
   securityPerformance: () => aiClient.get('/automation/security-performance'),
   generateReport: (data: any) => aiClient.post('/automation/reports/generate', data),
+  reportsHistory: () => aiClient.get('/automation/reports/history'),
   dlqEvents: () => aiClient.get('/automation/dlq'),
 
   // Day 6 Production Sprint APIs

@@ -23,10 +23,28 @@ export const ReportsCenter: React.FC = () => {
     { type: 'security', title: 'Security & Audit Report', icon: ShieldCheck, color: 'violet', desc: 'DevOps audit trails, HMAC signature checks, and JWT auth logs.' },
   ];
 
+  const triggerBrowserDownload = (content: string, filename: string, format: string) => {
+    const fmt = format.toLowerCase();
+    const mimeType = fmt === 'json' ? 'application/json' : fmt === 'csv' ? 'text/csv' : 'text/plain';
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
   const loadData = useCallback(async () => {
     try {
       const awsRes = await automationAPI.awsHealth().catch(() => ({ data: {} }));
       setAwsStatus(awsRes.data);
+      const histRes = await automationAPI.reportsHistory().catch(() => ({ data: { reports: [] } }));
+      if (histRes.data?.reports) {
+        setReportHistory(histRes.data.reports);
+      }
     } catch (err) {
       console.error('Failed to load reports metadata', err);
     }
@@ -39,13 +57,30 @@ export const ReportsCenter: React.FC = () => {
   const handleGenerate = async (reportType: string, format: string) => {
     setLoading(true);
     try {
-      const res = await automationAPI.generateReport({ report_type: reportType, format });
-      setActiveReport(res.data);
-      setReportHistory([res.data, ...reportHistory]);
+      const res = await automationAPI.generateReport({
+        report_type: reportType,
+        format,
+        date_range: dateRange,
+      });
+      const rep = res.data;
+      setActiveReport(rep);
+      setReportHistory((prev) => [rep, ...prev.filter((r) => r.report_id !== rep.report_id)]);
+
+      if (rep.content && rep.filename) {
+        triggerBrowserDownload(rep.content, rep.filename, format);
+      }
     } catch (err) {
       console.error('Failed to generate report', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDirectDownload = (rep: any) => {
+    if (rep.content && rep.filename) {
+      triggerBrowserDownload(rep.content, rep.filename, rep.format || 'csv');
+    } else if (rep.filename) {
+      window.open(`http://localhost:8001/automation/reports/download/${rep.filename}`, '_blank');
     }
   };
 
@@ -145,14 +180,22 @@ export const ReportsCenter: React.FC = () => {
       {/* Generated Report Output Inspector */}
       {activeReport && (
         <div className="p-5 bg-[#0B1120] border border-[#00F5A0]/30 rounded-2xl space-y-3 text-xs shadow-2xl">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-[#00F5A0]" />
               <span className="font-extrabold text-white text-sm">Generated: {activeReport.filename}</span>
             </div>
-            <span className="font-mono text-xs text-[#00F5A0] bg-[#00F5A0]/10 px-3 py-1 rounded-full font-bold">
-              {activeReport.record_count} Records Processed
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs text-[#00F5A0] bg-[#00F5A0]/10 px-3 py-1 rounded-full font-bold">
+                {activeReport.record_count} Records Processed ({activeReport.date_range?.toUpperCase() || '7D'})
+              </span>
+              <button
+                onClick={() => handleDirectDownload(activeReport)}
+                className="px-3.5 py-1.5 bg-[#00F5A0] hover:bg-[#00F5A0]/80 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition-all"
+              >
+                <Download className="w-3.5 h-3.5" /> Download File
+              </button>
+            </div>
           </div>
 
           <pre className="p-4 bg-[#050816] rounded-xl border border-[#1E293B] font-mono text-[11px] text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap">
@@ -165,7 +208,7 @@ export const ReportsCenter: React.FC = () => {
       <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl overflow-hidden shadow-2xl">
         <div className="p-5 border-b border-[#1E293B] flex items-center justify-between">
           <h3 className="text-sm font-extrabold text-white">Generated Reports Audit Log</h3>
-          <span className="text-xs font-mono text-[#00F5A0]">MongoDB Collection: generated_reports</span>
+          <span className="text-xs font-mono text-[#00F5A0]">MongoDB Collection: reports</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -175,8 +218,10 @@ export const ReportsCenter: React.FC = () => {
                 <th className="px-5 py-3 font-bold">Report ID</th>
                 <th className="px-5 py-3 font-bold">Report Type</th>
                 <th className="px-5 py-3 font-bold">Format</th>
+                <th className="px-5 py-3 font-bold">Filter</th>
                 <th className="px-5 py-3 font-bold">Storage Target</th>
                 <th className="px-5 py-3 font-bold">Created At</th>
+                <th className="px-5 py-3 font-bold text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1E293B]">
@@ -186,13 +231,22 @@ export const ReportsCenter: React.FC = () => {
                     <td className="px-5 py-3.5 font-mono text-[#00F5A0] font-bold">{rep.report_id}</td>
                     <td className="px-5 py-3.5 text-white font-extrabold capitalize">{rep.report_type} Report</td>
                     <td className="px-5 py-3.5 font-mono text-amber-400 uppercase">{rep.format}</td>
+                    <td className="px-5 py-3.5 font-mono text-sky-400 uppercase">{rep.date_range || '7d'}</td>
                     <td className="px-5 py-3.5 text-slate-300 font-mono text-[10px]">{rep.s3_url}</td>
                     <td className="px-5 py-3.5 text-slate-400">{new Date(rep.created_at).toLocaleString()}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => handleDirectDownload(rep)}
+                        className="px-2.5 py-1 bg-[#050816] hover:bg-[#00F5A0]/20 border border-[#1E293B] hover:border-[#00F5A0]/40 text-[#00F5A0] text-[10px] font-extrabold rounded-lg inline-flex items-center gap-1 transition-all"
+                      >
+                        <Download className="w-3 h-3" /> Save File
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-slate-500 italic">
+                  <td colSpan={7} className="px-5 py-8 text-center text-slate-500 italic">
                     No reports generated in this session. Click any card above to generate a report.
                   </td>
                 </tr>
