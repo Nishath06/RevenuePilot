@@ -1,16 +1,20 @@
 """
 RevenuePilot AI — Automation Engine
 Evaluates rules, conditions, and executes autonomous operations.
-Includes Inventory Watchdog, Revenue Watchdog, and Prebuilt Rule Templates.
+Pushes metrics to AWS CloudWatch, publishes events to EventBridge, sends SNS alerts, invokes Lambda, and uploads reports to S3.
 """
 from typing import Any, Dict, List, Optional
 import uuid
 import time
 from datetime import datetime
+
 from app.db.mongodb import get_mongodb
 from app.models.automation_rule import AutomationRule, RuleAction, RuleCondition
 from app.models.event_history import EventRecord, ExecutionLog
-from app.services.aws_eventbridge import aws_manager
+from app.services.aws_eventbridge import aws_manager, publish_event
+from app.services.aws_sns import send_notification
+from app.services.aws_s3 import upload_report
+from app.services.aws_cloudwatch import put_metric, put_log_event
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -150,10 +154,30 @@ class AutomationEngine:
     async def process_event(self, event: EventRecord):
         """
         Processes an incoming business event against all active automation rules.
+        Also publishes event to AWS EventBridge, pushes metric to CloudWatch, and logs to CloudWatch Logs.
         """
         db = get_mongodb()
-        # Seed prebuilt if empty
         await self.initialize_prebuilt_rules()
+
+        # Requirement 8 — Publish event to AWS EventBridge
+        eb_res = publish_event(
+            event_type=event.event_type,
+            detail=event.payload,
+            source=f"revenuepilot.{event.source or 'autoops'}",
+        )
+
+        # Requirement 8 — Push metric to CloudWatch
+        put_metric(
+            metric_name="AutoOpsEventsProcessed",
+            value=1.0,
+            unit="Count",
+            dimensions={"EventType": event.event_type, "Severity": event.severity or "info"},
+        )
+
+        # Requirement 8 — Push log event to CloudWatch Logs
+        put_log_event(
+            message=f"[AutoOps Event] Type: {event.event_type} | Source: {event.source} | EventID: {event.event_id} | Status: {eb_res.get('status')}"
+        )
 
         # Find enabled rules matching this event_type or trigger
         cursor = db.automation_rules.find({
@@ -196,7 +220,21 @@ class AutomationEngine:
 
         duration_ms = round((time.time() - start_time) * 1000, 2)
         exec_id = f"exec_{uuid.uuid4().hex[:12]}"
-        aws_pub_status = aws_statuses[0] if aws_statuses else "skipped"
+        aws_pub_status = aws_statuses[0] if aws_statuses else "success"
+
+        # Record CloudWatch metric for rule execution
+        put_metric(
+            metric_name="RuleExecutionsCount",
+            value=1.0,
+            unit="Count",
+            dimensions={"RuleName": rule_name, "Trigger": event.event_type},
+        )
+        put_metric(
+            metric_name="RuleExecutionLatencyMs",
+            value=duration_ms,
+            unit="Milliseconds",
+            dimensions={"RuleName": rule_name},
+        )
 
         exec_log = ExecutionLog(
             execution_id=exec_id,
@@ -275,6 +313,7 @@ class AutomationEngine:
                 "created_at": datetime.utcnow().isoformat(),
             }
             await db.incidents.insert_one(incident)
+            put_metric(metric_name="IncidentsCreated", value=1.0, unit="Count")
             return {"status": "created_incident", "incident_id": incident["id"]}
 
         elif action_type == "queue_recovery":
@@ -314,15 +353,29 @@ class AutomationEngine:
 
         elif action_type == "aws_sns":
             topic = params.get("topic", "payments")
-            msg = f"AutoOps Alert [{event.event_type}]: {params.get('subject', 'Business Alert')}"
-            return aws_manager.publish_sns(topic_type=topic, message=msg, subject=params.get("subject", "Alert"))
+            subject = params.get("subject", f"AutoOps Alert: {event.event_type}")
+            msg = f"AutoOps Alert [{event.event_type}] EventID={event.event_id}: {subject}"
+            sns_res = send_notification(topic_type_or_arn=topic, message=msg, subject=subject)
+            put_metric(metric_name="SNSEventsPublished", value=1.0, unit="Count", dimensions={"Topic": topic})
+            return sns_res
 
         elif action_type == "aws_eventbridge":
-            return aws_manager.publish_eventbridge(event_type=event.event_type, detail=event.payload)
+            eb_res = publish_event(event_type=event.event_type, detail=event.payload)
+            put_metric(metric_name="EventBridgeEventsPublished", value=1.0, unit="Count")
+            return eb_res
 
         elif action_type == "aws_lambda":
-            fn = params.get("function", "revenuepilot-report")
-            return aws_manager.invoke_lambda(function_name=fn, payload=event.payload)
+            fn = params.get("function", "revenuepilot-recovery-lambda")
+            lam_res = aws_manager.invoke_lambda(function_name=fn, payload=event.payload)
+            put_metric(metric_name="LambdaInvocationsCount", value=1.0, unit="Count", dimensions={"Function": fn})
+            return lam_res
+
+        elif action_type in ["aws_s3_upload", "upload_report"]:
+            filename = params.get("filename", f"report_{event.event_id}.json")
+            content = params.get("content", str(event.payload))
+            s3_res = upload_report(file_content=content, object_name=filename, content_type="application/json")
+            put_metric(metric_name="S3ReportsUploaded", value=1.0, unit="Count")
+            return s3_res
 
         elif action_type in ["email_campaign", "whatsapp_campaign"]:
             return {"status": f"campaign_queued_{action_type}"}
@@ -359,6 +412,8 @@ class AutomationEngine:
                     severity="warning"
                 )
 
+        put_metric(metric_name="InventoryWatchdogLowStock", value=float(low_count), unit="Count")
+        put_metric(metric_name="InventoryWatchdogOutOfStock", value=float(out_count), unit="Count")
         logger.info("Inventory Watchdog scan complete", low_stock=low_count, out_of_stock=out_count)
         return {"low_stock": low_count, "out_of_stock": out_count}
 
@@ -386,6 +441,7 @@ class AutomationEngine:
                 severity="info"
             )
 
+        put_metric(metric_name="RevenueGrowthPercentage", value=float(growth), unit="Percent")
         logger.info("Revenue Watchdog scan complete", growth_percentage=growth)
         return {"growth_percentage": growth}
 

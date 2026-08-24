@@ -54,14 +54,21 @@ class Settings(BaseSettings):
     # ── Cache ─────────────────────────────────────────────────────────────────
     CACHE_TTL_SECONDS: int = 10  # 10 seconds for live merchant data
 
-    # ── AWS EventBridge / SNS / Lambda ────────────────────────────────────────
+    # ── AWS Integration (EventBridge, SNS, Lambda, S3, CloudWatch) ───────────
+    AWS_MODE: str = "local"  # "local" for graceful fallback, "cloud" for real AWS
     AWS_REGION: str = "ap-south-1"
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_SESSION_TOKEN: str = ""
     EVENT_BUS_NAME: str = "revenuepilot-event-bus"
     AWS_SNS_TOPIC_ARN_PAYMENTS: str = ""
     AWS_SNS_TOPIC_ARN_INVENTORY: str = ""
     AWS_SNS_TOPIC_ARN_INCIDENTS: str = ""
+    AWS_SNS_TOPIC_ARN: str = ""
+    AWS_S3_BUCKET_NAME: str = "revenuepilot-reports"
+    AWS_CLOUDWATCH_LOG_GROUP: str = "/revenuepilot/autoops"
+    AWS_CLOUDWATCH_LOG_STREAM: str = "autoops-stream"
+    AWS_CLOUDWATCH_NAMESPACE: str = "RevenuePilot/AutoOps"
     AWS_LAMBDA_RECOVERY_NAME: str = "revenuepilot-recovery-lambda"
 
     # ── Store Backend ─────────────────────────────────────────────────────────

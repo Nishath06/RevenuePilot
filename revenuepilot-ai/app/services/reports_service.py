@@ -94,11 +94,11 @@ class ReportsService:
             content += f"------------------------------------------------------------------------\n\n"
             content += json.dumps(data, indent=2, default=str)
 
-        # Upload to S3 if AWS credentials exist
-        s3_url = f"local://reports/{filename}"
-        if aws_manager.has_credentials:
-            s3_url = f"https://s3.ap-south-1.amazonaws.com/revenuepilot-reports/{filename}"
-            logger.info("Report uploaded to AWS S3", s3_url=s3_url)
+        # Upload to S3 (real AWS or local fallback)
+        from app.services.aws_s3 import upload_report
+        media_type = "text/csv" if ext == "csv" else ("application/json" if ext == "json" else "text/plain")
+        s3_upload_res = upload_report(file_content=content, object_name=filename, content_type=media_type)
+        s3_url = s3_upload_res.get("s3_url", f"local://reports/{filename}")
 
         report_record = {
             "report_id": f"rep_{uuid.uuid4().hex[:8]}",
@@ -108,10 +108,11 @@ class ReportsService:
             "filename": filename,
             "record_count": len(data),
             "created_at": datetime.utcnow().isoformat(),
-            "download_url": f"/automation/reports/download/{filename}",
+            "download_url": s3_upload_res.get("download_url") or f"/automation/reports/download/{filename}",
             "s3_url": s3_url,
             "content": content,
         }
+
 
         await db.reports.insert_one(report_record)
         return report_record

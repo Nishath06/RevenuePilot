@@ -170,12 +170,16 @@ async def generate_test_event(payload: Dict[str, Any]):
     return {"status": "emitted", "event": evt.dict()}
 
 
+from app.services.aws_client import aws_client
+
+
 @router.get("/aws-health")
 async def get_aws_health():
     """
-    Task 17 & 18 — AWS EventBridge / SNS / Lambda health & local fallback status.
+    Requirement 10 — AWS EventBridge, SNS, Lambda, S3, and CloudWatch health & connectivity status with latency.
     """
-    return aws_manager.get_health_status()
+    return aws_client.verify_connectivity()
+
 
 
 @router.post("/watchdog/inventory")
