@@ -100,7 +100,7 @@ async def seed_production_data() -> dict:
 
     # 1. Clear Existing Demo Data
     collections_to_clear = [
-        "orders", "payments", "customers", "products", "inventory_events",
+        "orders", "payments", "customers", "users", "products", "inventory_events",
         "recovery_campaigns", "ai_conversations", "conversations", "reports",
         "generated_reports", "events", "lambda_executions", "cloudwatch_metrics",
         "execution_history", "incidents", "watchdog_snapshots", "watchdogs",
@@ -118,6 +118,8 @@ async def seed_production_data() -> dict:
         "Wireless Audio": 0, "Keyboards": 0, "Gaming": 0, "Smart Watches": 0,
         "Mobile Accessories": 0, "Cameras": 0, "Laptop Accessories": 0, "Home Office": 0
     }
+
+    BRANDS = ["AeroSound", "SonicBoom", "MechKeys", "FitPulse", "Titan", "VlogCam", "LinkMax", "Lumina", "Apex", "Vortex"]
 
     for i in range(120):
         base_item = PRODUCT_TEMPLATES[i % len(PRODUCT_TEMPLATES)]
@@ -142,14 +144,18 @@ async def seed_production_data() -> dict:
         rating = round(random.uniform(3.9, 4.9), 1)
 
         p_doc = {
-            "_id": p_id,
-            "id": p_id,
             "product_id": p_id,
+            "id": p_id,
             "sku": f"SKU-{cat[:3].upper()}-{i+101}",
-            "name": p_name,
+            "title": p_name,        # Required by revenuepilot-store Beanie model
+            "name": p_name,         # Required by revenuepilot-ai
+            "description": f"High-performance {p_name} engineered for ultimate digital convenience and durability.",
+            "brand": random.choice(BRANDS),
             "category": cat,
             "price": float(base_price),
             "stock": stock,
+            "images": [f"https://images.unsplash.com/photo-1505740420928?auto=format&fit=crop&w=600&q=80"],
+            "tags": [cat.lower(), "electronics", "lifestyle"],
             "low_stock_threshold": 5,
             "views": views,
             "sales": sales,
@@ -167,8 +173,9 @@ async def seed_production_data() -> dict:
     await db.products.insert_many(products_docs)
     counts["products"] = len(products_docs)
 
-    # 3. SEED CUSTOMERS (600 customers)
+    # 3. SEED CUSTOMERS & USERS (600 customers)
     customers_docs = []
+    users_docs = []
     cust_ids = []
     segments = ["VIP", "Repeat", "One-Time", "Dormant"]
     segment_weights = [0.15, 0.35, 0.40, 0.10]
@@ -185,11 +192,11 @@ async def seed_production_data() -> dict:
 
         created_dt = start_90d + timedelta(days=random.randint(0, 85))
 
+        email_str = f"{fn.lower()}.{ln.lower()}{i+10}@example.com"
         c_doc = {
-            "_id": c_id,
             "customer_id": c_id,
             "name": f"{fn} {ln}",
-            "email": f"{fn.lower()}.{ln.lower()}{i+10}@example.com",
+            "email": email_str,
             "phone": f"+9198{random.randint(10000000, 99999999)}",
             "city": city_info[0],
             "state": city_info[1],
@@ -203,8 +210,20 @@ async def seed_production_data() -> dict:
         customers_docs.append(c_doc)
         cust_ids.append(c_id)
 
+        # store user doc
+        user_doc = {
+            "name": f"{fn} {ln}",
+            "email": email_str,
+            "phone": c_doc["phone"],
+            "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQOEg6Lruj3vjPGga31lW",
+            "created_at": created_dt.isoformat(),
+        }
+        users_docs.append(user_doc)
+
     await db.customers.insert_many(customers_docs)
+    await db.users.insert_many(users_docs)
     counts["customers"] = len(customers_docs)
+    counts["users"] = len(users_docs)
 
     # 4. SEED ORDERS & PAYMENTS (2,500 orders)
     orders_docs = []
@@ -261,20 +280,24 @@ async def seed_production_data() -> dict:
         cancelled_at = (order_dt + timedelta(minutes=random.randint(5, 60))).isoformat() if status == "CANCELLED" else None
         fail_reason = random.choice(failure_reasons) if status in ["FAILED", "CANCELLED"] else None
 
+        # Format status for Beanie Order model: Pending, Paid, Failed, Cancelled
+        beanie_status = "Paid" if status == "PAID" else ("Failed" if status == "FAILED" else ("Cancelled" if status == "CANCELLED" else "Pending"))
+
         ord_doc = {
-            "_id": o_id,
             "order_id": o_id,
             "razorpay_order_id": rzp_order_id,
             "payment_id": pay_id,
             "customer_id": cust["customer_id"],
             "user_id": cust["customer_id"],
-            "product_id": prod["id"],
+            "product_id": prod["product_id"],
             "product_name": prod["name"],
             "quantity": qty,
-            "order_status": status,
-            "payment_status": status,
+            "order_status": beanie_status,
+            "payment_status": beanie_status,
             "status": status.lower(),
             "amount": total_amount,
+            "total_amount": total_amount,  # Required by revenuepilot-store Beanie Order model
+            "currency": "INR",
             "tax": tax,
             "discount": discount,
             "coupon_code": coupon,
@@ -285,14 +308,29 @@ async def seed_production_data() -> dict:
             "payment_method": method,
             "city": cust["city"],
             "state": cust["state"],
-            "items": [{"product_id": prod["id"], "name": prod["name"], "quantity": qty, "price": unit_price}],
+            "items": [{
+                "product_id": prod["product_id"],
+                "title": prod["name"],      # Required by OrderItem in revenuepilot-store
+                "name": prod["name"],
+                "quantity": qty,
+                "price": unit_price,
+                "image": prod["images"][0]
+            }],
+            "payment_events": [
+                {
+                    "status": beanie_status,
+                    "timestamp": order_iso,
+                    "reason": fail_reason
+                }
+            ]
         }
         orders_docs.append(ord_doc)
 
         # Payment record with webhook structure
+        store_pay_status = "captured" if status == "PAID" else ("failed" if status == "FAILED" else ("cancelled" if status == "CANCELLED" else "pending"))
         pay_doc = {
-            "_id": pay_id,
             "payment_id": pay_id,
+            "razorpay_payment_id": pay_id if status in ["PAID", "REFUNDED"] else None,
             "order_id": o_id,
             "razorpay_order_id": rzp_order_id,
             "customer_id": cust["customer_id"],
@@ -302,9 +340,11 @@ async def seed_production_data() -> dict:
             "product_name": prod["name"],
             "amount": total_amount,
             "payment_method": method,
-            "status": status.lower(),
+            "method": method.lower(),
+            "status": store_pay_status,  # captured, failed, cancelled, pending
             "payment_status": status,
             "failure_reason": fail_reason,
+            "error_code": fail_reason,
             "webhook_latency_ms": random.randint(45, 240),
             "webhook_events": [
                 {"event": "payment.authorized", "timestamp": order_iso},
@@ -317,7 +357,7 @@ async def seed_production_data() -> dict:
         # Inventory event for deduction or restock
         inv_event = {
             "event_id": f"invevent_{i+10001:05d}",
-            "product_id": prod["id"],
+            "product_id": prod["product_id"],
             "product_name": prod["name"],
             "change_type": "SALE_DEDUCTION" if status == "PAID" else "RESERVE_RELEASE",
             "quantity_change": -qty if status == "PAID" else 0,
@@ -349,7 +389,6 @@ async def seed_production_data() -> dict:
         cust = random.choice(customers_docs)
 
         camp_doc = {
-            "_id": f"camp_{i+101:03d}",
             "campaign_id": f"camp_{i+101:03d}",
             "campaign_type": c_type,
             "customer_id": cust["customer_id"],
@@ -397,7 +436,6 @@ async def seed_production_data() -> dict:
             })
 
         conv_doc = {
-            "_id": conv_id,
             "conversation_id": conv_id,
             "title": f"AI Session: {topic} ({c_dt.strftime('%b %d')})",
             "topic": topic,
@@ -424,7 +462,6 @@ async def seed_production_data() -> dict:
         s3_url = f"s3://revenuepilot-reports/reports/{fname}"
 
         rep_doc = {
-            "_id": f"rep_{i+101:03d}",
             "report_id": f"rep_{i+101:03d}",
             "report_type": r_type,
             "format": fmt,
@@ -459,7 +496,6 @@ async def seed_production_data() -> dict:
         trace = f"trace_{uuid.uuid4().hex[:12]}"
 
         evt_doc = {
-            "_id": f"evt_{i+10001:05d}",
             "event_id": f"evt_{i+10001:05d}",
             "event_type": e_type,
             "step": e_type.replace("_", " ").title(),
@@ -493,7 +529,6 @@ async def seed_production_data() -> dict:
         l_dt = start_90d + timedelta(days=random.randint(0, 89), minutes=random.randint(0, 1439))
 
         lam_doc = {
-            "_id": f"lam_{i+1001:04d}",
             "execution_id": f"lam_{i+1001:04d}",
             "request_id": f"req_aws_{uuid.uuid4().hex[:12]}",
             "function_name": fn_name,
@@ -573,7 +608,6 @@ async def seed_production_data() -> dict:
         st = random.choices(statuses_inc, weights=[0.75, 0.15, 0.10])[0]
 
         inc_doc = {
-            "_id": f"inc_{i+101:03d}",
             "id": f"inc_{i+101:03d}",
             "title": f"Incident: {sev.upper()} - Payment Gateway Latency Spike" if i % 2 == 0 else f"Incident: Stock Depletion Alert ({prod_ids[i % len(prod_ids)]})",
             "severity": sev,
