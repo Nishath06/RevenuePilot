@@ -8,6 +8,7 @@ import {
   Clock, Layers, Activity, ShoppingBag, ChevronRight, X, PieChart, RefreshCw
 } from 'lucide-react';
 import { aiAPI, automationAPI } from '../services/api';
+import { CopilotSidebar } from '../components/CopilotSidebar';
 
 interface SourceAttribution {
   collections_used?: string[];
@@ -384,7 +385,13 @@ export const CopilotPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-56px-48px)] max-w-4xl mx-auto relative">
+    <div className="flex h-full max-h-[calc(100vh-56px-48px)] gap-4">
+      <CopilotSidebar
+        activeId={currentConvId}
+        onSelectConversation={(id) => setCurrentConvId(id)}
+        onNewChat={handleNewConversation}
+      />
+      <div className="flex-1 flex flex-col h-full max-w-4xl mx-auto relative overflow-hidden">
       {/* Top Bar Header */}
       <div className="flex items-center gap-3 mb-4 flex-shrink-0">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
@@ -876,5 +883,6 @@ export const CopilotPage: React.FC = () => {
         <p className="text-center text-[10px] text-slate-700 mt-2">Enter to send · Shift+Enter for newline</p>
       </div>
     </div>
+  </div>
   );
 };

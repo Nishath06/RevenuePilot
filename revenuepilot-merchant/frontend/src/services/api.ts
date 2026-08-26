@@ -83,6 +83,7 @@ export const automationAPI = {
   awsHealth: () => aiClient.get('/automation/aws-health'),
   triggerInventoryWatchdog: () => aiClient.post('/automation/watchdog/inventory'),
   triggerRevenueWatchdog: () => aiClient.post('/automation/watchdog/revenue'),
+  triggerPopularityWatchdog: () => aiClient.post('/automation/watchdog/popularity'),
 
   // Day 5 DevOps & Observability APIs
   observability: () => aiClient.get('/automation/observability'),
