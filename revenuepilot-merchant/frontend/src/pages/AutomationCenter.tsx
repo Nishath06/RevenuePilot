@@ -10,7 +10,7 @@ import { automationAPI } from '../services/api';
 import { KPICard } from '../components/cards/KPICard';
 import { GenericLineChart, HourlyBarChart } from '../components/charts/Charts';
 
-type TabType = 'rules' | 'builder' | 'events' | 'history' | 'health_score' | 'topology' | 'observability' | 'audit_logs' | 'reports' | 'cicd' | 'security' | 'test_generator';
+type TabType = 'rules' | 'builder' | 'events' | 'history' | 'health_score' | 'topology' | 'observability' | 'audit_logs' | 'reports' | 'cicd' | 'security' | 'test_generator' | 'demo_data';
 
 export const AutomationCenter: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('rules');
@@ -29,6 +29,11 @@ export const AutomationCenter: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRule, setSelectedRule] = useState<any>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Demo Data Generator State
+  const [seedingLoading, setSeedingLoading] = useState(false);
+  const [seedingProgress, setSeedingProgress] = useState(0);
+  const [seedingResult, setSeedingResult] = useState<any>(null);
 
   // Report Generator State
   const [reportType, setReportType] = useState('revenue');
@@ -55,6 +60,58 @@ export const AutomationCenter: React.FC = () => {
     conditions: [{ field: 'amount', operator: 'gt', value: 1000 }],
     actions: [{ type: 'create_incident', params: { severity: 'high', title: 'Payment Exception Alert' } }],
   });
+
+  const handleSeedDemoStore = async () => {
+    setSeedingLoading(true);
+    setSeedingProgress(15);
+    setSeedingResult(null);
+    try {
+      const timer = setInterval(() => {
+        setSeedingProgress((prev) => (prev >= 90 ? 90 : prev + 25));
+      }, 80);
+      const res = await automationAPI.seedDemoStore();
+      clearInterval(timer);
+      setSeedingProgress(100);
+      setSeedingResult(res.data);
+      await loadData();
+    } catch (err) {
+      console.error('Demo store seed failed', err);
+    } finally {
+      setSeedingLoading(false);
+    }
+  };
+
+  const handleSeedTodayActivity = async () => {
+    setSeedingLoading(true);
+    setSeedingProgress(30);
+    setSeedingResult(null);
+    try {
+      const res = await automationAPI.seedTodayActivity();
+      setSeedingProgress(100);
+      setSeedingResult(res.data);
+      await loadData();
+    } catch (err) {
+      console.error('Today activity seed failed', err);
+    } finally {
+      setSeedingLoading(false);
+    }
+  };
+
+  const handleResetDemoStore = async () => {
+    setSeedingLoading(true);
+    setSeedingProgress(40);
+    setSeedingResult(null);
+    try {
+      const res = await automationAPI.resetDemoStore();
+      setSeedingProgress(100);
+      setSeedingResult(res.data);
+      await loadData();
+    } catch (err) {
+      console.error('Demo store reset failed', err);
+    } finally {
+      setSeedingLoading(false);
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -178,13 +235,38 @@ export const AutomationCenter: React.FC = () => {
             <span className="w-2.5 h-2.5 rounded-full bg-[#00F5A0] animate-pulse" />
             <span className="text-[11px] font-extrabold tracking-widest text-[#00F5A0] uppercase">Autonomous Cloud Merchant OS</span>
           </div>
-          <h1 className="text-3xl font-black text-white flex items-center gap-3">
+          <h1 className="text-3xl font-black text-white flex items-center gap-3 flex-wrap">
             AutoOps Control Center
-            <span className="text-xs px-3 py-1 bg-[#FF9900]/10 border border-[#FF9900]/30 text-[#FF9900] rounded-full font-bold">
-              AWS EventBridge & CloudWatch Stack
-            </span>
+            {awsHealth?.aws_mode === 'cloud' ? (
+              <span className="text-xs px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/10">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                AWS Connected Mode
+              </span>
+            ) : (
+              <span className="text-xs px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                Local Fallback Mode
+              </span>
+            )}
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Event-driven triggers, visual workflow pipelines, DevOps observability, and local/cloud fallback execution</p>
+          {/* TASK 16 — Cloud Integration Badges */}
+          <div className="flex items-center gap-2 mt-2 flex-wrap text-[11px] font-mono">
+            <span className="bg-slate-800/80 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+              <Zap className="w-3 h-3 text-cyan-400" /> EventBridge Connected
+            </span>
+            <span className="bg-slate-800/80 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+              <Cpu className="w-3 h-3 text-purple-400" /> Lambda Connected
+            </span>
+            <span className="bg-slate-800/80 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+              <Database className="w-3 h-3 text-emerald-400" /> S3 Connected
+            </span>
+            <span className="bg-slate-800/80 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+              <Radio className="w-3 h-3 text-amber-400" /> SNS Connected
+            </span>
+            <span className="bg-slate-800/80 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+              <Activity className="w-3 h-3 text-indigo-400" /> CloudWatch Connected
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -250,6 +332,7 @@ export const AutomationCenter: React.FC = () => {
           { key: 'cicd', label: 'CI/CD & K8s', icon: GitBranch },
           { key: 'security', label: 'Security & Latency', icon: Lock },
           { key: 'test_generator', label: 'Developer Test Panel', icon: Sparkles },
+          { key: 'demo_data', label: 'Demo Data Generator', icon: Database },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -835,6 +918,101 @@ export const AutomationCenter: React.FC = () => {
                 <p className="text-slate-500 italic py-10 text-center">Click "Emit Event" to view live dispatch log</p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 12: DEMO DATA GENERATOR */}
+      {activeTab === 'demo_data' && (
+        <div className="space-y-6">
+          <div className="bg-[#0B1120] border border-[#00F5A0]/30 rounded-2xl p-6 shadow-2xl space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E293B] pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#00F5A0] animate-pulse" />
+                  <span className="text-[11px] font-extrabold tracking-widest text-[#00F5A0] uppercase">RevenuePilot v2.7 Seeding Engine</span>
+                </div>
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
+                  <Database className="w-5 h-5 text-[#00F5A0]" /> Demo Store Data Generator
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Populate MongoDB Atlas with 90 days of realistic merchant business data for testing all dashboards, AI Copilot, reports, and cloud automations.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={handleSeedDemoStore}
+                  disabled={seedingLoading}
+                  className="px-4 py-2.5 bg-gradient-to-r from-[#00F5A0] to-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-[#00F5A0]/20 hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${seedingLoading ? 'animate-spin' : ''}`} />
+                  Generate 90-Day Demo Store
+                </button>
+
+                <button
+                  onClick={handleSeedTodayActivity}
+                  disabled={seedingLoading}
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4" /> Generate Today's Live Activity
+                </button>
+
+                <button
+                  onClick={handleResetDemoStore}
+                  disabled={seedingLoading}
+                  className="px-4 py-2.5 bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-400 font-bold text-xs rounded-xl transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" /> Reset Demo Database
+                </button>
+              </div>
+            </div>
+
+            {/* Seeding Progress Bar */}
+            {seedingLoading && (
+              <div className="space-y-2 bg-[#050816] p-4 rounded-xl border border-[#1E293B]">
+                <div className="flex justify-between text-xs font-bold text-slate-300">
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#00F5A0]" />
+                    Processing MongoDB Seeding Pipelines...
+                  </span>
+                  <span className="font-mono text-[#00F5A0]">{seedingProgress}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#00F5A0] to-emerald-400 transition-all duration-300 rounded-full"
+                    style={{ width: `${seedingProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Seeding Output Summary */}
+            {seedingResult && (
+              <div className="p-5 bg-[#050816] border border-[#00F5A0]/30 rounded-xl space-y-4 text-xs shadow-xl">
+                <div className="flex justify-between items-center border-b border-[#1E293B] pb-3">
+                  <span className="font-extrabold text-[#00F5A0] text-sm flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" /> {seedingResult.message || 'Seeding Operation Completed'}
+                  </span>
+                  {seedingResult.duration_seconds && (
+                    <span className="font-mono text-slate-400 text-[11px]">
+                      Duration: {seedingResult.duration_seconds}s
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                  {Object.entries(seedingResult.collections || seedingResult.reset_summary || {}).map(([col, count]: [string, any]) => (
+                    <div key={col} className="bg-[#0B1120] p-3 rounded-lg border border-[#1E293B]">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider block font-bold truncate">
+                        {col}
+                      </span>
+                      <span className="text-sm font-extrabold text-white font-mono">{count} docs</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

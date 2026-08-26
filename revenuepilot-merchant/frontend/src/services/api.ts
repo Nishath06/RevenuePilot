@@ -110,6 +110,11 @@ export const automationAPI = {
   runScheduleNow: (id: string) => aiClient.post(`/automation/schedules/${id}/run`),
   timeline: (category?: string) => aiClient.get('/automation/timeline', { params: { category } }),
   simulateScenario: (data: any) => aiClient.post('/automation/simulate', data),
+  awsAuditLogs: () => aiClient.get('/automation/aws-audit-logs'),
+  testAwsService: (service: string) => aiClient.post('/automation/aws-health/test', { service }),
+  seedDemoStore: () => aiClient.post('/automation/demo/seed'),
+  seedTodayActivity: () => aiClient.post('/automation/demo/today'),
+  resetDemoStore: () => aiClient.post('/automation/demo/reset'),
 };
 
 // ─── Store Merchant APIs ──────────────────────────────────────────────────────

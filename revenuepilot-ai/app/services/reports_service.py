@@ -100,21 +100,39 @@ class ReportsService:
         s3_upload_res = upload_report(file_content=content, object_name=filename, content_type=media_type)
         s3_url = s3_upload_res.get("s3_url", f"local://reports/{filename}")
 
+        # TASK 8 — Invoke ReportsLambda via Boto3 / Simulation
+        from app.services.cloud_event_bus import cloud_event_bus
+        rep_payload = {
+            "merchant_id": "merch_default",
+            "report_type": report_type,
+            "format": format_type,
+            "date_range": date_range,
+            "filename": filename,
+            "s3_url": s3_url,
+        }
+        await cloud_event_bus.invoke_reports_lambda(rep_payload)
+
+        file_size_bytes = len(content.encode('utf-8'))
+
         report_record = {
             "report_id": f"rep_{uuid.uuid4().hex[:8]}",
             "report_type": report_type,
             "format": format_type,
             "date_range": date_range,
             "filename": filename,
+            "size": file_size_bytes,
             "record_count": len(data),
+            "generated_at": datetime.utcnow().isoformat(),
             "created_at": datetime.utcnow().isoformat(),
+            "status": "COMPLETED",
             "download_url": s3_upload_res.get("download_url") or f"/automation/reports/download/{filename}",
             "s3_url": s3_url,
             "content": content,
         }
 
-
-        await db.reports.insert_one(report_record)
+        # Store in both `reports` and `generated_reports` for full Task 8 compatibility
+        await db.reports.insert_one(report_record.copy())
+        await db.generated_reports.insert_one(report_record.copy())
         return report_record
 
     async def get_reports_history(self, limit: int = 50) -> List[Dict[str, Any]]:

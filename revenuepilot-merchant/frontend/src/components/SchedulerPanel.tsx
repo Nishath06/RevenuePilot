@@ -101,9 +101,12 @@ export const SchedulerPanel: React.FC = () => {
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
                       {sched.category || 'General'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      AWS EventBridge
                     </span>
                     <span className="text-[10px] font-mono text-slate-400">{sched.id}</span>
                   </div>

@@ -146,17 +146,22 @@ export const WatchdogDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                    isCritical
-                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      : isWarning
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  }`}
-                >
-                  {wd.status}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      isCritical
+                        ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        : isWarning
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    }`}
+                  >
+                    {wd.status}
+                  </span>
+                  <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30 flex items-center gap-1">
+                    <Zap className="w-2.5 h-2.5" /> CloudWatch Synced
+                  </span>
+                </div>
               </div>
 
               <p className="text-xs text-slate-400 mb-4 line-clamp-2">{wd.description}</p>

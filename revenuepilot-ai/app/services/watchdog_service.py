@@ -107,6 +107,17 @@ class WatchdogService:
 
         duration_ms = round((datetime.now(timezone.utc) - start_time).total_seconds() * 1000, 2)
 
+        # TASK 7 — Trigger InventoryLambda via Boto3 / Simulation
+        inv_payload = {
+            "merchant_id": "merch_default",
+            "items_scanned": scanned_count,
+            "low_stock_count": low_stock_count,
+            "out_of_stock_count": out_of_stock_count,
+            "dead_stock_count": dead_stock_count,
+            "items": [{"sku": str(p.get("sku", p.get("_id"))), "name": p.get("name", "Item"), "stock": p.get("stock", 0)} for p in products[:10]]
+        }
+        await cloud_event_bus.invoke_inventory_lambda(inv_payload)
+
         # Store Execution Log
         exec_log = {
             "execution_id": f"exec_inv_{uuid.uuid4().hex[:8]}",

@@ -61,22 +61,35 @@ class AWSClientManager:
 
     def _init_clients(self):
         try:
+            from botocore.config import Config
+            boto_config = Config(
+                retries={"max_attempts": 3, "mode": "standard"},
+                connect_timeout=3,
+                read_timeout=5,
+            )
+
             kwargs = {
                 "region_name": self.region,
                 "aws_access_key_id": self.access_key,
                 "aws_secret_access_key": self.secret_key,
+                "config": boto_config,
             }
             if self.session_token:
                 kwargs["aws_session_token"] = self.session_token
 
-            self._session = boto3.Session(**kwargs)
-            self._events_client = self._session.client("events")
-            self._sns_client = self._session.client("sns")
-            self._lambda_client = self._session.client("lambda")
-            self._s3_client = self._session.client("s3")
-            self._cloudwatch_client = self._session.client("cloudwatch")
-            self._logs_client = self._session.client("logs")
-            logger.info("Successfully initialized boto3 AWS clients", region=self.region)
+            self._session = boto3.Session(
+                region_name=self.region,
+                aws_access_key_id=self.access_key,
+                aws_secret_access_key=self.secret_key,
+                aws_session_token=self.session_token or None,
+            )
+            self._events_client = self._session.client("events", config=boto_config)
+            self._sns_client = self._session.client("sns", config=boto_config)
+            self._lambda_client = self._session.client("lambda", config=boto_config)
+            self._s3_client = self._session.client("s3", config=boto_config)
+            self._cloudwatch_client = self._session.client("cloudwatch", config=boto_config)
+            self._logs_client = self._session.client("logs", config=boto_config)
+            logger.info("Successfully initialized boto3 AWS clients with retry config", region=self.region)
         except Exception as err:
             logger.warning("Failed to initialize AWS boto3 clients — falling back to local mode", error=str(err))
             self.is_local_mode = True
