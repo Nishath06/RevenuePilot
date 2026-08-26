@@ -30,6 +30,7 @@ async def register(user_in: UserRegister):
         name=user.name,
         email=user.email,
         phone=user.phone,
+        role=getattr(user, "role", "merchant") or "merchant",
         created_at=user.created_at
     )
     
@@ -50,6 +51,7 @@ async def login(user_in: UserLogin):
         name=user.name,
         email=user.email,
         phone=user.phone,
+        role=getattr(user, "role", "merchant") or "merchant",
         created_at=user.created_at
     )
     
@@ -62,5 +64,6 @@ async def get_me(current_user: User = Depends(get_current_user)):
         name=current_user.name,
         email=current_user.email,
         phone=current_user.phone,
+        role=getattr(current_user, "role", "merchant") or "merchant",
         created_at=current_user.created_at
     )
