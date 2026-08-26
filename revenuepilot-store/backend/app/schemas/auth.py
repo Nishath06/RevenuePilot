@@ -16,7 +16,6 @@ class UserOut(BaseModel):
     name: str
     email: str
     phone: str
-    role: str = "merchant"
     created_at: datetime
 
 class TokenResponse(BaseModel):

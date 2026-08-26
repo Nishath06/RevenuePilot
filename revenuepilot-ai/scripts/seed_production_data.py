@@ -173,9 +173,18 @@ async def seed_production_data() -> dict:
     await db.products.insert_many(products_docs)
     counts["products"] = len(products_docs)
 
-    # 3. SEED CUSTOMERS & USERS (600 customers)
+    # 3. SEED CUSTOMERS & USERS (600 customers + 1 default merchant account)
     customers_docs = []
-    users_docs = []
+    users_docs = [
+        {
+            "name": "RevenuePilot Merchant",
+            "email": "merchant@revenuepilot.com",
+            "phone": "+919876543210",
+            "role": "merchant",
+            "password_hash": "$2b$12$riAPMAaETmcjA/a46.2OC.Afk7YhCMcRndnAO2aJ6ZasS2LkpkXdG", # password123
+            "created_at": start_90d.isoformat(),
+        }
+    ]
     cust_ids = []
     segments = ["VIP", "Repeat", "One-Time", "Dormant"]
     segment_weights = [0.15, 0.35, 0.40, 0.10]
@@ -216,36 +225,9 @@ async def seed_production_data() -> dict:
             "email": email_str,
             "phone": c_doc["phone"],
             "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQOEg6Lruj3vjPGga31lW",
-            "role": "customer",
             "created_at": created_dt.isoformat(),
         }
         users_docs.append(user_doc)
-
-    # Add default Admin and Merchant portal users for demo login
-    try:
-        import bcrypt
-        pw_admin_hash = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode('utf-8')
-        pw_merch_hash = bcrypt.hashpw(b"merchant123", bcrypt.gensalt()).decode('utf-8')
-    except Exception:
-        pw_admin_hash = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQOEg6Lruj3vjPGga31lW"
-        pw_merch_hash = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQOEg6Lruj3vjPGga31lW"
-
-    users_docs.append({
-        "name": "RevenuePilot Admin",
-        "email": "admin@revenuepilot.com",
-        "phone": "+919876543210",
-        "password_hash": pw_admin_hash,
-        "role": "admin",
-        "created_at": start_90d.isoformat(),
-    })
-    users_docs.append({
-        "name": "RevenuePilot Merchant",
-        "email": "merchant@revenuepilot.com",
-        "phone": "+919876543211",
-        "password_hash": pw_merch_hash,
-        "role": "merchant",
-        "created_at": start_90d.isoformat(),
-    })
 
     await db.customers.insert_many(customers_docs)
     await db.users.insert_many(users_docs)
