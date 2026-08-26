@@ -249,8 +249,8 @@ async def seed_production_data() -> dict:
     ]
 
     for i in range(2500):
-        # Create timestamps over 90 days with day-of-week & holiday peaks
-        day_offset = random.randint(0, 89)
+        # Create timestamps over 90 days (0 to 90 days, including Today) with day-of-week & holiday peaks
+        day_offset = random.randint(0, 90)
         order_date = start_90d + timedelta(days=day_offset)
 
         # Higher sales on Fri (4), Sat (5), Sun (6)

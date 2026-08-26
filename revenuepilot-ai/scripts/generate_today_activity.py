@@ -60,20 +60,26 @@ async def generate_today_activity() -> dict:
         tax = round(subtotal * 0.18, 2)
         total_amount = round(subtotal + tax, 2)
 
+        p_id = prod.get("product_id", prod.get("id"))
+        p_name = prod.get("title", prod.get("name", "Product"))
+        beanie_status = "Paid" if status == "PAID" else ("Failed" if status == "FAILED" else "Cancelled")
+        store_pay_status = "captured" if status == "PAID" else ("failed" if status == "FAILED" else "cancelled")
+
         ord_doc = {
-            "_id": o_id,
             "order_id": o_id,
             "razorpay_order_id": rzp_order_id,
             "payment_id": pay_id,
             "customer_id": cust["customer_id"],
             "user_id": cust["customer_id"],
-            "product_id": prod["id"],
-            "product_name": prod["name"],
+            "product_id": p_id,
+            "product_name": p_name,
             "quantity": qty,
-            "order_status": status,
-            "payment_status": status,
+            "order_status": beanie_status,
+            "payment_status": beanie_status,
             "status": status.lower(),
             "amount": total_amount,
+            "total_amount": total_amount,
+            "currency": "INR",
             "tax": tax,
             "discount": 0.0,
             "coupon_code": "",
@@ -83,23 +89,31 @@ async def generate_today_activity() -> dict:
             "payment_method": method,
             "city": cust["city"],
             "state": cust["state"],
-            "items": [{"product_id": prod["id"], "name": prod["name"], "quantity": qty, "price": prod["price"]}],
+            "items": [{
+                "product_id": p_id,
+                "title": p_name,
+                "name": p_name,
+                "quantity": qty,
+                "price": prod["price"],
+                "image": prod.get("images", [""])[0] if prod.get("images") else ""
+            }],
         }
         new_orders.append(ord_doc)
 
         pay_doc = {
-            "_id": pay_id,
             "payment_id": pay_id,
+            "razorpay_payment_id": pay_id if status == "PAID" else None,
             "order_id": o_id,
             "razorpay_order_id": rzp_order_id,
             "customer_id": cust["customer_id"],
             "customer_name": cust["name"],
             "customer_email": cust["email"],
             "customer_phone": cust["phone"],
-            "product_name": prod["name"],
+            "product_name": p_name,
             "amount": total_amount,
             "payment_method": method,
-            "status": status.lower(),
+            "method": method.lower(),
+            "status": store_pay_status,
             "payment_status": status,
             "failure_reason": "BAD_GATEWAY_TIMEOUT" if status == "FAILED" else None,
             "webhook_latency_ms": random.randint(45, 180),
@@ -108,7 +122,6 @@ async def generate_today_activity() -> dict:
         new_payments.append(pay_doc)
 
         evt_doc = {
-            "_id": f"evt_today_{i}_{uuid.uuid4().hex[:6]}",
             "event_id": f"evt_today_{i}_{uuid.uuid4().hex[:6]}",
             "event_type": "PAYMENT_SUCCESS" if status == "PAID" else "PAYMENT_FAILED",
             "step": "Payment Processed",
