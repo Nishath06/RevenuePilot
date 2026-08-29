@@ -23,9 +23,12 @@ export const ReportsCenter: React.FC = () => {
     { type: 'security', title: 'Security & Audit Report', icon: ShieldCheck, color: 'violet', desc: 'DevOps audit trails, HMAC signature checks, and JWT auth logs.' },
   ];
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [generatingType, setGeneratingType] = useState<string | null>(null);
+
   const triggerBrowserDownload = (content: string, filename: string, format: string) => {
     const fmt = format.toLowerCase();
-    const mimeType = fmt === 'json' ? 'application/json' : fmt === 'csv' ? 'text/csv' : 'text/plain';
+    const mimeType = fmt === 'json' ? 'application/json' : (fmt === 'csv' ? 'text/csv' : (fmt === 'pdf' ? 'application/pdf' : 'text/plain'));
     const blob = new Blob([content], { type: mimeType });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -56,6 +59,8 @@ export const ReportsCenter: React.FC = () => {
 
   const handleGenerate = async (reportType: string, format: string) => {
     setLoading(true);
+    setGeneratingType(`${reportType}-${format}`);
+    setErrorMsg(null);
     try {
       const res = await automationAPI.generateReport({
         report_type: reportType,
@@ -69,18 +74,23 @@ export const ReportsCenter: React.FC = () => {
       if (rep.content && rep.filename) {
         triggerBrowserDownload(rep.content, rep.filename, format);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to generate report', err);
+      setErrorMsg(err?.response?.data?.detail || err.message || 'Failed to connect to RevenuePilot AI Engine. Please make sure local services are running.');
     } finally {
       setLoading(false);
+      setGeneratingType(null);
     }
   };
 
   const handleDirectDownload = (rep: any) => {
     if (rep.content && rep.filename) {
       triggerBrowserDownload(rep.content, rep.filename, rep.format || 'csv');
+    } else if (rep.download_url && rep.download_url.startsWith('http')) {
+      window.open(rep.download_url, '_blank');
     } else if (rep.filename) {
-      window.open(`http://localhost:8001/automation/reports/download/${rep.filename}`, '_blank');
+      const baseUrl = import.meta.env.VITE_AI_API_URL || 'http://localhost:8001';
+      window.open(`${baseUrl}/automation/reports/download/${rep.filename}`, '_blank');
     }
   };
 
@@ -127,6 +137,13 @@ export const ReportsCenter: React.FC = () => {
         </div>
       </div>
 
+      {errorMsg && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-xs text-rose-300 font-medium flex items-center justify-between">
+          <span>⚠️ {errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="text-rose-400 font-bold hover:text-white">Dismiss</button>
+        </div>
+      )}
+
       {/* Report Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {reportCards.map((card, idx) => {
@@ -153,22 +170,25 @@ export const ReportsCenter: React.FC = () => {
               <div className="pt-3 border-t border-[#1E293B] space-y-2">
                 <div className="grid grid-cols-3 gap-2">
                   <button
+                    disabled={loading}
                     onClick={() => handleGenerate(card.type, 'csv')}
-                    className="py-1.5 bg-[#050816] hover:bg-[#00F5A0]/20 border border-[#1E293B] hover:border-[#00F5A0]/40 text-[#00F5A0] font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1"
+                    className="py-1.5 bg-[#050816] hover:bg-[#00F5A0]/20 border border-[#1E293B] hover:border-[#00F5A0]/40 text-[#00F5A0] font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1 disabled:opacity-50"
                   >
-                    <Download className="w-3 h-3" /> CSV
+                    {generatingType === `${card.type}-csv` ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} CSV
                   </button>
                   <button
+                    disabled={loading}
                     onClick={() => handleGenerate(card.type, 'json')}
-                    className="py-1.5 bg-[#050816] hover:bg-amber-500/20 border border-[#1E293B] hover:border-amber-500/40 text-amber-400 font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1"
+                    className="py-1.5 bg-[#050816] hover:bg-amber-500/20 border border-[#1E293B] hover:border-amber-500/40 text-amber-400 font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1 disabled:opacity-50"
                   >
-                    <Download className="w-3 h-3" /> JSON
+                    {generatingType === `${card.type}-json` ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} JSON
                   </button>
                   <button
-                    onClick={() => handleGenerate(card.type, 'txt')}
-                    className="py-1.5 bg-[#050816] hover:bg-indigo-500/20 border border-[#1E293B] hover:border-indigo-500/40 text-indigo-400 font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1"
+                    disabled={loading}
+                    onClick={() => handleGenerate(card.type, 'pdf')}
+                    className="py-1.5 bg-[#050816] hover:bg-indigo-500/20 border border-[#1E293B] hover:border-indigo-500/40 text-indigo-400 font-bold text-[10px] rounded-xl transition-all flex items-center justify-center gap-1 disabled:opacity-50"
                   >
-                    <Download className="w-3 h-3" /> PDF
+                    {generatingType === `${card.type}-pdf` ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} PDF
                   </button>
                 </div>
               </div>

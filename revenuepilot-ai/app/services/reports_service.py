@@ -24,11 +24,12 @@ class ReportsService:
 
     async def generate_report(self, report_type: str, format_type: str = "csv", date_range: str = "7d") -> Dict[str, Any]:
         """
-        Task 8 — Generates operational report file in CSV, JSON, or TXT format based on date filter.
+        Generates operational report file in CSV, JSON, TXT, or PDF format based on date filter.
         """
         db = get_mongodb()
         now_str = datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
-        ext = "txt" if format_type.lower() in ["pdf", "txt"] else format_type.lower()
+        fmt_clean = format_type.lower()
+        ext = fmt_clean if fmt_clean in ["csv", "json", "pdf", "txt"] else "csv"
         filename = f"revenuepilot_{report_type}_{date_range}_{now_str}.{ext}"
 
         # Compute date cutoff
@@ -45,49 +46,62 @@ class ReportsService:
         cutoff_iso = cutoff.isoformat()
 
         # Build collection query
-        query = {}
-        # Try fetching with date filter first
-        date_query = {"$or": [{"created_at": {"$gte": cutoff_iso}}, {"timestamp": {"$gte": cutoff_iso}}]}
+        date_query = {"$or": [{"created_at": {"$gte": cutoff_iso}}, {"timestamp": {"$gte": cutoff_iso}}, {"generated_at": {"$gte": cutoff_iso}}]}
 
-        # Fetch data based on report type
+        # Correct Mongo collection mapping
         col_map = {
             "revenue": db.orders,
             "payment": db.payments,
             "inventory": db.products,
             "customer": db.customers,
-            "recovery": db.recoveries,
+            "recovery": db.recovery_campaigns,
             "automation": db.execution_history,
             "incident": db.incidents,
-            "security": db.audit_logs,
+            "security": db.aws_audit_logs,
         }
         col = col_map.get(report_type, db.events)
 
         try:
-            data = await col.find(date_query, {"_id": 0}).to_list(length=200)
+            data = await col.find(date_query, {"_id": 0}).sort("created_at", -1).to_list(length=200)
             if not data:
-                data = await col.find({}, {"_id": 0}).to_list(length=200)
+                data = await col.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=200)
         except Exception:
             data = await col.find({}, {"_id": 0}).to_list(length=200)
 
         content = ""
         if ext == "csv":
             if data:
-                keys = list(data[0].keys())
+                # Dynamically collect all keys across records
+                keys_set = []
+                for row in data:
+                    for k in row.keys():
+                        if k not in keys_set:
+                            keys_set.append(k)
                 output = io.StringIO()
-                writer = csv.DictWriter(output, fieldnames=keys)
+                writer = csv.DictWriter(output, fieldnames=keys_set)
                 writer.writeheader()
                 for row in data:
-                    writer.writerow({k: str(v) for k, v in row.items()})
+                    formatted_row = {}
+                    for k in keys_set:
+                        val = row.get(k, "")
+                        if isinstance(val, (dict, list)):
+                            formatted_row[k] = json.dumps(val)
+                        elif val is None:
+                            formatted_row[k] = ""
+                        else:
+                            formatted_row[k] = str(val)
+                    writer.writerow(formatted_row)
                 content = output.getvalue()
             else:
                 content = "id,status,created_at,date_range\n1,no_data,now," + date_range
         elif ext == "json":
             content = json.dumps(data, indent=2, default=str)
-        else:
+        else:  # pdf or txt
             content = f"========================================================================\n"
             content += f" REVENUEPILOT ENTERPRISE OPERATIONAL REPORT ({report_type.upper()})\n"
             content += f"========================================================================\n"
             content += f"Generated At : {datetime.utcnow().isoformat()} UTC\n"
+            content += f"Format       : {format_type.upper()}\n"
             content += f"Date Range   : {date_range.upper()}\n"
             content += f"Total Records: {len(data)}\n"
             content += f"Storage Path : local://reports/{filename}\n"
@@ -96,11 +110,11 @@ class ReportsService:
 
         # Upload to S3 (real AWS or local fallback)
         from app.services.aws_s3 import upload_report
-        media_type = "text/csv" if ext == "csv" else ("application/json" if ext == "json" else "text/plain")
+        media_type = "text/csv" if ext == "csv" else ("application/json" if ext == "json" else ("application/pdf" if ext == "pdf" else "text/plain"))
         s3_upload_res = upload_report(file_content=content, object_name=filename, content_type=media_type)
         s3_url = s3_upload_res.get("s3_url", f"local://reports/{filename}")
 
-        # TASK 8 — Invoke ReportsLambda via Boto3 / Simulation
+        # Invoke ReportsLambda via Boto3 / Simulation
         from app.services.cloud_event_bus import cloud_event_bus
         rep_payload = {
             "merchant_id": "merch_default",
@@ -130,7 +144,7 @@ class ReportsService:
             "content": content,
         }
 
-        # Store in both `reports` and `generated_reports` for full Task 8 compatibility
+        # Store in both `reports` and `generated_reports`
         await db.reports.insert_one(report_record.copy())
         await db.generated_reports.insert_one(report_record.copy())
         return report_record

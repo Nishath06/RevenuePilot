@@ -52,6 +52,7 @@ app.include_router(webhooks.router, prefix=settings.API_V1_STR)
 app.include_router(merchant.router, prefix=settings.API_V1_STR)
 
 @app.get("/")
+@app.get(f"{settings.API_V1_STR}/")
 async def root():
     return {
         "name": settings.PROJECT_NAME,
@@ -61,5 +62,6 @@ async def root():
     }
 
 @app.get("/health")
+@app.get(f"{settings.API_V1_STR}/health")
 async def health_check():
     return {"status": "healthy"}

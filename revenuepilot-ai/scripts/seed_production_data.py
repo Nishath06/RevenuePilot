@@ -35,7 +35,7 @@ INDIAN_CITIES = [
 ]
 
 FIRST_NAMES = [
-    "Aarav", "Ananya", "Rohan", "Priya", "Vikram", "Neha", "Rahul", "Sneha", "Aditya", "Pooja",
+    "Nishath", "Aarav", "Ananya", "Rohan", "Priya", "Vikram", "Neha", "Rahul", "Sneha", "Aditya", "Pooja",
     "Karan", "Divya", "Siddharth", "Meera", "Amit", "Kavya", "Varun", "Riya", "Arjun", "Tanvi",
     "Rajesh", "Sunita", "Deepak", "Shweta", "Sanjay", "Nisha", "Manoj", "Aarti", "Alok", "Simran"
 ]
@@ -89,6 +89,7 @@ PRODUCT_TEMPLATES = [
 async def seed_production_data() -> dict:
     """
     Main seeding engine populating MongoDB with realistic merchant business data for 90 days.
+    Preserves data for user Nishath.
     """
     client = AsyncIOMotorClient(settings.MONGODB_URL)
     db = client[settings.DATABASE_NAME]
@@ -98,7 +99,11 @@ async def seed_production_data() -> dict:
     now = datetime.now(timezone.utc)
     start_90d = now - timedelta(days=90)
 
-    # 1. Clear Existing Demo Data
+    # 1. Preserve Nishath User & Customer records if they exist
+    existing_nishath_users = await db.users.find({"$or": [{"name": {"$regex": "Nishath", "$options": "i"}}, {"email": {"$regex": "nishath", "$options": "i"}}]}).to_list(length=50)
+    existing_nishath_customers = await db.customers.find({"$or": [{"name": {"$regex": "Nishath", "$options": "i"}}, {"email": {"$regex": "nishath", "$options": "i"}}]}).to_list(length=50)
+
+    # Clear Existing Demo Data
     collections_to_clear = [
         "orders", "payments", "customers", "users", "products", "inventory_events",
         "recovery_campaigns", "ai_conversations", "conversations", "reports",
@@ -129,7 +134,6 @@ async def seed_production_data() -> dict:
         category_counts[cat] += 1
         p_id = f"prod_{i+101:03d}"
 
-        # Determine stock condition (normal, low stock, out of stock, dead stock)
         if i in [5, 18, 42]:
             stock = 0 # Out of stock
         elif i in [12, 29, 65, 88]:
@@ -147,8 +151,8 @@ async def seed_production_data() -> dict:
             "product_id": p_id,
             "id": p_id,
             "sku": f"SKU-{cat[:3].upper()}-{i+101}",
-            "title": p_name,        # Required by revenuepilot-store Beanie model
-            "name": p_name,         # Required by revenuepilot-ai
+            "title": p_name,
+            "name": p_name,
             "description": f"High-performance {p_name} engineered for ultimate digital convenience and durability.",
             "brand": random.choice(BRANDS),
             "category": cat,
@@ -173,9 +177,37 @@ async def seed_production_data() -> dict:
     await db.products.insert_many(products_docs)
     counts["products"] = len(products_docs)
 
-    # 3. SEED CUSTOMERS & USERS (600 customers + 1 default merchant account)
-    customers_docs = []
+    # 3. SEED CUSTOMERS & USERS (Preserving Nishath)
+    customers_docs = [
+        {
+            "customer_id": "cust_nishath_001",
+            "name": "Nishath",
+            "email": "nishath@revenuepilot.com",
+            "phone": "+919876543210",
+            "city": "Bengaluru",
+            "state": "Karnataka",
+            "segment": "VIP",
+            "lifetime_value": 89450.0,
+            "total_orders": 18,
+            "preferred_payment": "UPI",
+            "preferred_channel": "WhatsApp",
+            "created_at": start_90d.isoformat(),
+        }
+    ]
+    if existing_nishath_customers:
+        for c in existing_nishath_customers:
+            c.pop("_id", None)
+            customers_docs.append(c)
+
     users_docs = [
+        {
+            "name": "Nishath",
+            "email": "nishath@revenuepilot.com",
+            "phone": "+919876543210",
+            "role": "merchant",
+            "password_hash": "$2b$12$riAPMAaETmcjA/a46.2OC.Afk7YhCMcRndnAO2aJ6ZasS2LkpkXdG", # password123
+            "created_at": start_90d.isoformat(),
+        },
         {
             "name": "RevenuePilot Merchant",
             "email": "merchant@revenuepilot.com",
@@ -185,6 +217,13 @@ async def seed_production_data() -> dict:
             "created_at": start_90d.isoformat(),
         }
     ]
+    seen_user_emails = {"nishath@revenuepilot.com", "merchant@revenuepilot.com"}
+    if existing_nishath_users:
+        for u in existing_nishath_users:
+            u.pop("_id", None)
+            if u.get("email") not in seen_user_emails:
+                seen_user_emails.add(u.get("email"))
+                users_docs.append(u)
     cust_ids = []
     segments = ["VIP", "Repeat", "One-Time", "Dormant"]
     segment_weights = [0.15, 0.35, 0.40, 0.10]
@@ -219,15 +258,17 @@ async def seed_production_data() -> dict:
         customers_docs.append(c_doc)
         cust_ids.append(c_id)
 
-        # store user doc
-        user_doc = {
-            "name": f"{fn} {ln}",
-            "email": email_str,
-            "phone": c_doc["phone"],
-            "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQOEg6Lruj3vjPGga31lW",
-            "created_at": created_dt.isoformat(),
-        }
-        users_docs.append(user_doc)
+        # store user doc if unique
+        if email_str not in seen_user_emails:
+            seen_user_emails.add(email_str)
+            user_doc = {
+                "name": f"{fn} {ln}",
+                "email": email_str,
+                "phone": c_doc["phone"],
+                "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQOEg6Lruj3vjPGga31lW",
+                "created_at": created_dt.isoformat(),
+            }
+            users_docs.append(user_doc)
 
     await db.customers.insert_many(customers_docs)
     await db.users.insert_many(users_docs)
