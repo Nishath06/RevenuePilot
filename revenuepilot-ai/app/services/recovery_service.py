@@ -168,13 +168,14 @@ class RecoveryService:
             }
             await cloud_event_bus.invoke_recovery_lambda(rec_payload)
 
-            await db.recovery_campaigns.insert_one({**camp_doc})
+            camp_insert = dict(camp_doc)
+            await db.recovery_campaigns.insert_one(camp_insert)
 
             # Publish SNS notification (Task 5)
-            await send_notification(
+            send_notification(
+                topic_type_or_arn="payments",
                 subject=f"Recovery Campaign Dispatched: {coupon_code}",
                 message=f"Failed payment of ₹{amt:,.2f} for {cust_name}. Discount coupon {coupon_code} issued.",
-                topic_arn="AWS_SNS_TOPIC_ARN_PAYMENTS",
             )
 
             # Emit EventBridge Event & Timeline
@@ -184,7 +185,8 @@ class RecoveryService:
                 source="recovery-engine",
                 severity="info",
             )
-            campaigns_created.append(camp_doc)
+            clean_camp = {k: str(v) if k == "_id" else v for k, v in camp_doc.items() if k != "_id"}
+            campaigns_created.append(clean_camp)
 
         duration_ms = round((datetime.now(timezone.utc) - start_time).total_seconds() * 1000, 2)
 

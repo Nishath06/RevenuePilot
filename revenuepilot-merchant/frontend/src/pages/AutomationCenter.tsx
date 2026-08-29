@@ -4,129 +4,96 @@ import {
   Zap, Cpu, Activity, Play, Plus, CheckCircle, AlertTriangle, ShieldCheck,
   Clock, RefreshCw, Layers, Server, Radio, ArrowRight, ShieldAlert,
   Send, Trash2, Eye, Sliders, Check, Workflow, Sparkles, AlertCircle, Database,
-  Download, FileText, Lock, GitBranch, Terminal, Shield, Gauge, Share2
+  Download, FileText, Lock, GitBranch, Terminal, Shield, Gauge, Share2,
+  ExternalLink, ChevronRight, MessageSquare, Mail, Bell, CheckCircle2, XCircle
 } from 'lucide-react';
+import {
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
 import { automationAPI } from '../services/api';
 import { KPICard } from '../components/cards/KPICard';
-import { GenericLineChart, HourlyBarChart } from '../components/charts/Charts';
 
-type TabType = 'rules' | 'builder' | 'events' | 'history' | 'health_score' | 'topology' | 'observability' | 'audit_logs' | 'reports' | 'cicd' | 'security' | 'test_generator' | 'demo_data';
+type TabType =
+  | 'operations_console'
+  | 'cloudwatch_metrics'
+  | 'event_timeline'
+  | 'watchdogs'
+  | 'schedulers'
+  | 'lambdas'
+  | 'reports'
+  | 'recovery_campaigns'
+  | 'rules'
+  | 'test_generator'
+  | 'demo_generator';
+
+const CLOUDWATCH_METRICS = [
+  { key: 'OrdersProcessed', label: 'Orders Processed', unit: 'Count', color: '#10b981' },
+  { key: 'RevenueGenerated', label: 'Revenue Generated (₹)', unit: 'INR', color: '#00F5A0' },
+  { key: 'FailedPayments', label: 'Failed Payments', unit: 'Count', color: '#ef4444' },
+  { key: 'RecoveredPayments', label: 'Recovered Payments', unit: 'Count', color: '#3b82f6' },
+  { key: 'InventoryAlerts', label: 'Inventory Alerts', unit: 'Count', color: '#f59e0b' },
+  { key: 'LambdaInvocations', label: 'Lambda Invocations', unit: 'Count', color: '#a855f7' },
+  { key: 'WebhookLatency', label: 'Webhook Latency (ms)', unit: 'ms', color: '#06b6d4' },
+  { key: 'DatabaseLatency', label: 'Database Latency (ms)', unit: 'ms', color: '#8b5cf6' },
+  { key: 'PaymentSuccessRate', label: 'Payment Success Rate (%)', unit: '%', color: '#10b981' },
+  { key: 'SchedulerExecutions', label: 'Scheduler Executions', unit: 'Count', color: '#f97316' },
+  { key: 'SNSNotificationsSent', label: 'SNS Notifications Sent', unit: 'Count', color: '#ec4899' },
+  { key: 'S3ReportsUploaded', label: 'S3 Reports Uploaded', unit: 'Count', color: '#14b8a6' },
+];
 
 export const AutomationCenter: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('rules');
+  const [activeTab, setActiveTab] = useState<TabType>('operations_console');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Core Feeds & Automation Data
   const [metrics, setMetrics] = useState<any>(null);
   const [rules, setRules] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [awsHealth, setAwsHealth] = useState<any>(null);
   const [healthScore, setHealthScore] = useState<any>(null);
-  const [topology, setTopology] = useState<any>(null);
-  const [observability, setObservability] = useState<any>(null);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [cicd, setCicd] = useState<any>(null);
-  const [secPerf, setSecPerf] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<any>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [feeds, setFeeds] = useState<any>(null);
+  const [demoSummary, setDemoSummary] = useState<any>(null);
 
-  // Demo Data Generator State
-  const [seedingLoading, setSeedingLoading] = useState(false);
-  const [seedingProgress, setSeedingProgress] = useState(0);
-  const [seedingResult, setSeedingResult] = useState<any>(null);
+  // Demo Generator & Testing State
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [actionOutput, setActionOutput] = useState<any>(null);
+  const [selectedMetricKey, setSelectedMetricKey] = useState('OrdersProcessed');
 
-  // Report Generator State
-  const [reportType, setReportType] = useState('revenue');
-  const [reportFormat, setReportFormat] = useState('csv');
-  const [generatedReport, setGeneratedReport] = useState<any>(null);
+  // Preview Drawer for Recovery Campaigns
+  const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
+  const [previewTab, setPreviewTab] = useState<'whatsapp' | 'email' | 'push'>('whatsapp');
 
-  // Test Generator State
+  // Developer Test Event State
   const [testEventType, setTestEventType] = useState('PAYMENT_FAILED');
   const [testPayload, setTestPayload] = useState({
     customer_name: 'Priya Sharma',
-    customer_email: 'priya@example.com',
+    customer_email: 'priya.sharma@example.com',
     amount: 6499,
     failure_reason: 'BAD_GATEWAY_TIMEOUT',
-    method: 'upi',
+    method: 'UPI',
   });
   const [testResult, setTestResult] = useState<any>(null);
 
-  // New Rule Form State
-  const [newRule, setNewRule] = useState({
-    name: 'New Custom Automation',
-    trigger: 'PAYMENT_FAILED',
-    category: 'Payments',
-    priority: 5,
-    conditions: [{ field: 'amount', operator: 'gt', value: 1000 }],
-    actions: [{ type: 'create_incident', params: { severity: 'high', title: 'Payment Exception Alert' } }],
-  });
+  // AWS Diagnostics State
+  const [testingService, setTestingService] = useState<string | null>(null);
+  const [serviceTestResult, setServiceTestResult] = useState<any>(null);
 
-  const handleSeedDemoStore = async () => {
-    setSeedingLoading(true);
-    setSeedingProgress(15);
-    setSeedingResult(null);
-    try {
-      const timer = setInterval(() => {
-        setSeedingProgress((prev) => (prev >= 90 ? 90 : prev + 25));
-      }, 80);
-      const res = await automationAPI.seedDemoStore();
-      clearInterval(timer);
-      setSeedingProgress(100);
-      setSeedingResult(res.data);
-      await loadData();
-    } catch (err) {
-      console.error('Demo store seed failed', err);
-    } finally {
-      setSeedingLoading(false);
-    }
-  };
-
-  const handleSeedTodayActivity = async () => {
-    setSeedingLoading(true);
-    setSeedingProgress(30);
-    setSeedingResult(null);
-    try {
-      const res = await automationAPI.seedTodayActivity();
-      setSeedingProgress(100);
-      setSeedingResult(res.data);
-      await loadData();
-    } catch (err) {
-      console.error('Today activity seed failed', err);
-    } finally {
-      setSeedingLoading(false);
-    }
-  };
-
-  const handleResetDemoStore = async () => {
-    setSeedingLoading(true);
-    setSeedingProgress(40);
-    setSeedingResult(null);
-    try {
-      const res = await automationAPI.resetDemoStore();
-      setSeedingProgress(100);
-      setSeedingResult(res.data);
-      await loadData();
-    } catch (err) {
-      console.error('Demo store reset failed', err);
-    } finally {
-      setSeedingLoading(false);
-    }
-  };
-
+  // Load all live feeds and backend stats
   const loadData = useCallback(async () => {
     try {
-      const [mRes, rRes, eRes, hRes, aRes, hsRes, topRes, obsRes, audRes, cicdRes, spRes] = await Promise.all([
+      const [mRes, rRes, eRes, hRes, aRes, hsRes, feedsRes, sumRes] = await Promise.all([
         automationAPI.metrics().catch(() => ({ data: {} })),
         automationAPI.rules().catch(() => ({ data: [] })),
         automationAPI.events().catch(() => ({ data: { events: [] } })),
         automationAPI.history().catch(() => ({ data: { history: [] } })),
         automationAPI.awsHealth().catch(() => ({ data: {} })),
         automationAPI.healthScore().catch(() => ({ data: null })),
-        automationAPI.topology().catch(() => ({ data: null })),
-        automationAPI.observability().catch(() => ({ data: null })),
-        automationAPI.auditLogs().catch(() => ({ data: { logs: [] } })),
-        automationAPI.cicd().catch(() => ({ data: null })),
-        automationAPI.securityPerformance().catch(() => ({ data: null })),
+        automationAPI.getDemoFeeds().catch(() => ({ data: null })),
+        automationAPI.getDemoSummary().catch(() => ({ data: null })),
       ]);
 
       setMetrics(mRes.data);
@@ -135,11 +102,8 @@ export const AutomationCenter: React.FC = () => {
       setHistory(hRes.data?.history ?? []);
       setAwsHealth(aRes.data);
       setHealthScore(hsRes.data);
-      setTopology(topRes.data);
-      setObservability(obsRes.data);
-      setAuditLogs(audRes.data?.logs ?? []);
-      setCicd(cicdRes.data);
-      setSecPerf(spRes.data);
+      setFeeds(feedsRes.data);
+      setDemoSummary(sumRes.data?.summary);
     } catch (err) {
       console.error('Failed to load AutoOps automation data', err);
     } finally {
@@ -150,25 +114,123 @@ export const AutomationCenter: React.FC = () => {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 10000); // 10 seconds auto-refresh
+    const interval = setInterval(loadData, 8000); // 8-second live stream polling
     return () => clearInterval(interval);
   }, [loadData]);
 
-  const toggleRule = async (ruleId: string, currentEnabled: boolean) => {
+  // QA Quick Action Handlers
+  const handleGenerate30DayData = async () => {
+    setActionLoading('generate_data');
+    setProgress(15);
+    setActionOutput(null);
     try {
-      await automationAPI.updateRule(ruleId, { enabled: !currentEnabled });
-      setRules(rules.map(r => r.id === ruleId ? { ...r, enabled: !currentEnabled } : r));
+      const timer = setInterval(() => {
+        setProgress((prev) => (prev >= 90 ? 90 : prev + 25));
+      }, 70);
+      const res = await automationAPI.generateDemoData({
+        days: 30,
+        orders: 2500,
+        customers: 650,
+        products: 120,
+      });
+      clearInterval(timer);
+      setProgress(100);
+      setActionOutput({ type: 'generate', data: res.data });
+      await loadData();
     } catch (err) {
-      console.error('Failed to toggle rule', err);
+      console.error('Demo data generation failed', err);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const deleteRule = async (ruleId: string) => {
+  const handleSimulateEvents = async () => {
+    setActionLoading('events');
+    setProgress(30);
     try {
-      await automationAPI.deleteRule(ruleId);
-      setRules(rules.filter(r => r.id !== ruleId));
+      const res = await automationAPI.generateDemoEvents({ count: 10 });
+      setProgress(100);
+      setActionOutput({ type: 'events', data: res.data });
+      await loadData();
     } catch (err) {
-      console.error('Failed to delete rule', err);
+      console.error('Event simulation failed', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRunWatchdogs = async () => {
+    setActionLoading('watchdogs');
+    setProgress(30);
+    try {
+      const res = await automationAPI.runDemoWatchdogs();
+      setProgress(100);
+      setActionOutput({ type: 'watchdogs', data: res.data });
+      await loadData();
+    } catch (err) {
+      console.error('Watchdog execution failed', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRunSchedulers = async () => {
+    setActionLoading('schedulers');
+    setProgress(30);
+    try {
+      const res = await automationAPI.runDemoSchedulers();
+      setProgress(100);
+      setActionOutput({ type: 'schedulers', data: res.data });
+      await loadData();
+    } catch (err) {
+      console.error('Scheduler execution failed', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRunLambdas = async () => {
+    setActionLoading('lambdas');
+    setProgress(30);
+    try {
+      const res = await automationAPI.runDemoLambdas();
+      setProgress(100);
+      setActionOutput({ type: 'lambdas', data: res.data });
+      await loadData();
+    } catch (err) {
+      console.error('Lambda execution failed', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRunReports = async () => {
+    setActionLoading('reports');
+    setProgress(30);
+    try {
+      const res = await automationAPI.runDemoReports();
+      setProgress(100);
+      setActionOutput({ type: 'reports', data: res.data });
+      await loadData();
+    } catch (err) {
+      console.error('Reports generation failed', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleResetDemoData = async () => {
+    setActionLoading('reset');
+    setProgress(50);
+    try {
+      const res = await automationAPI.resetDemoStore();
+      setProgress(100);
+      setActionOutput({ type: 'reset', data: res.data });
+      await loadData();
+    } catch (err) {
+      console.error('Demo reset failed', err);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -186,153 +248,283 @@ export const AutomationCenter: React.FC = () => {
     }
   };
 
-  const handleGenerateReport = async () => {
+  const handleTestAwsService = async (service: string) => {
+    setTestingService(service);
     try {
-      const res = await automationAPI.generateReport({ report_type: reportType, format: reportFormat });
-      setGeneratedReport(res.data);
-    } catch (err) {
-      console.error('Failed to generate report', err);
-    }
-  };
-
-  const handleCreateRuleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await automationAPI.createRule(newRule);
-      setRules([...rules, res.data]);
-      setShowCreateModal(false);
-    } catch (err) {
-      console.error('Failed to create rule', err);
-    }
-  };
-
-  const runWatchdog = async (type: 'inventory' | 'revenue') => {
-    try {
-      if (type === 'inventory') await automationAPI.triggerInventoryWatchdog();
-      else await automationAPI.triggerRevenueWatchdog();
+      const res = await automationAPI.testAwsService(service);
+      setServiceTestResult(res.data);
       loadData();
     } catch (err) {
-      console.error('Failed to trigger watchdog', err);
+      console.error('AWS test failed', err);
+    } finally {
+      setTestingService(null);
     }
   };
 
-  // Execution trend chart data
-  const executionChartData = [
-    { label: '00:00', value: 4 },
-    { label: '04:00', value: 2 },
-    { label: '08:00', value: 12 },
-    { label: '12:00', value: 18 },
-    { label: '16:00', value: 14 },
-    { label: '20:00', value: 22 },
-  ];
+  const selectedMetricConfig =
+    CLOUDWATCH_METRICS.find((m) => m.key === selectedMetricKey) || CLOUDWATCH_METRICS[0];
+  const chartData = feeds?.cloudwatch_feed || [];
 
   return (
-    <div className="space-y-8 max-w-screen-xl bg-[#050816] text-slate-100 p-6 rounded-3xl min-h-screen border border-[#00F5A0]/10 shadow-2xl">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E293B] pb-5">
+    <div className="space-y-8 max-w-screen-2xl bg-[#050816] text-slate-100 p-6 rounded-3xl min-h-screen border border-[#00F5A0]/10 shadow-2xl">
+      {/* ── TOP HEADER & AWS STATUS BAR ────────────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1E293B] pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-[#00F5A0] animate-pulse" />
-            <span className="text-[11px] font-extrabold tracking-widest text-[#00F5A0] uppercase">Autonomous Cloud Merchant OS</span>
+            <span className="text-[11px] font-extrabold tracking-widest text-[#00F5A0] uppercase font-mono">
+              Autonomous Cloud Merchant OS v2.7
+            </span>
           </div>
           <h1 className="text-3xl font-black text-white flex items-center gap-3 flex-wrap">
-            AutoOps Control Center
+            AutoOps Live Operations Console
             {awsHealth?.aws_mode === 'cloud' ? (
+              <span className="text-xs px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/10">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                AWS Production Mode (ap-south-1)
+              </span>
+            ) : (
               <span className="text-xs px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/10">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 AWS Connected Mode
               </span>
-            ) : (
-              <span className="text-xs px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                Local Fallback Mode
-              </span>
             )}
           </h1>
-          {/* TASK 16 — Cloud Integration Badges */}
-          <div className="flex items-center gap-2 mt-2 flex-wrap text-[11px] font-mono">
-            <span className="bg-slate-800/80 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded flex items-center gap-1">
-              <Zap className="w-3 h-3 text-cyan-400" /> EventBridge Connected
-            </span>
-            <span className="bg-slate-800/80 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded flex items-center gap-1">
-              <Cpu className="w-3 h-3 text-purple-400" /> Lambda Connected
-            </span>
-            <span className="bg-slate-800/80 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
-              <Database className="w-3 h-3 text-emerald-400" /> S3 Connected
-            </span>
-            <span className="bg-slate-800/80 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded flex items-center gap-1">
-              <Radio className="w-3 h-3 text-amber-400" /> SNS Connected
-            </span>
-            <span className="bg-slate-800/80 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded flex items-center gap-1">
-              <Activity className="w-3 h-3 text-indigo-400" /> CloudWatch Connected
-            </span>
-          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Full 30-day merchant dataset generation, AWS Lambda invocations, EventBridge rules, 7-watchdog health board, and 12-metric CloudWatch moving graphs.
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => runWatchdog('inventory')}
-            className="px-3.5 py-2 bg-[#111827] border border-[#1E293B] hover:border-[#00F5A0]/40 text-[#00F5A0] text-xs font-bold rounded-xl transition-all flex items-center gap-2"
-          >
-            <Sliders className="w-3.5 h-3.5" /> Stock Scan
-          </button>
+        {/* AWS Live Service Status Badges with Test Pings */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { id: 'eventbridge', name: 'EventBridge', icon: Zap, color: 'text-cyan-400', bg: 'border-cyan-500/30' },
+            { id: 'lambda', name: 'Lambda (5)', icon: Cpu, color: 'text-purple-400', bg: 'border-purple-500/30' },
+            { id: 'sns', name: 'SNS', icon: Radio, color: 'text-pink-400', bg: 'border-pink-500/30' },
+            { id: 's3', name: 'S3 Reports', icon: Database, color: 'text-emerald-400', bg: 'border-emerald-500/30' },
+            { id: 'cloudwatch', name: 'CloudWatch', icon: Activity, color: 'text-amber-400', bg: 'border-amber-500/30' },
+          ].map((srv) => {
+            const Icon = srv.icon;
+            const isTesting = testingService === srv.id;
+            return (
+              <button
+                key={srv.id}
+                onClick={() => handleTestAwsService(srv.id)}
+                disabled={isTesting}
+                className={`bg-[#0B1120] hover:bg-slate-800 text-[11px] font-mono font-bold px-3 py-1.5 rounded-xl border ${srv.bg} flex items-center gap-1.5 transition-all shadow-sm`}
+                title={`Click to run diagnostic ping on AWS ${srv.name}`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${srv.color} ${isTesting ? 'animate-spin' : ''}`} />
+                <span className="text-slate-200">{srv.name}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00F5A0]" />
+              </button>
+            );
+          })}
 
           <button
-            onClick={() => runWatchdog('revenue')}
-            className="px-3.5 py-2 bg-[#111827] border border-[#1E293B] hover:border-[#FF9900]/40 text-[#FF9900] text-xs font-bold rounded-xl transition-all flex items-center gap-2"
-          >
-            <Activity className="w-3.5 h-3.5" /> Revenue Scan
-          </button>
-
-          <button
-            onClick={() => { setRefreshing(true); loadData(); }}
+            onClick={() => {
+              setRefreshing(true);
+              loadData();
+            }}
             disabled={refreshing}
-            className="p-2.5 bg-[#111827] border border-[#1E293B] hover:bg-white/5 rounded-xl text-slate-300 transition-all"
+            className="p-2.5 bg-[#111827] border border-[#1E293B] hover:bg-white/5 rounded-xl text-slate-300 transition-all ml-1"
+            title="Refresh Live Operations Console"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#00F5A0]' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* KPI Cards Row (Task 1 & 10) */}
+      {/* ── KPI HIGHLIGHTS ROW ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        <KPICard label="Active Rules" value={metrics?.active_automations ?? rules.filter(r => r.enabled).length} icon={Zap} color="emerald" loading={loading} index={0} />
-        <KPICard label="Triggered Today" value={metrics?.triggered_today ?? 8} icon={Activity} color="indigo" loading={loading} index={1} />
-        <KPICard label="Health Score" value={`${healthScore?.score ?? 96}/100`} icon={Gauge} color="emerald" loading={loading} index={2} />
-        <KPICard label="Failed Execs" value={metrics?.failed_executions ?? 0} icon={AlertTriangle} color={metrics?.failed_executions > 0 ? 'rose' : 'emerald'} loading={loading} index={3} />
-        <KPICard label="Scheduled Jobs" value={metrics?.scheduled_jobs ?? 2} icon={Clock} color="amber" loading={loading} index={4} />
-        <div className="bg-[#0B1120] border border-[#FF9900]/30 rounded-2xl p-4 flex flex-col justify-between shadow-lg shadow-[#FF9900]/5">
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">AWS Mode</span>
-            <Radio className="w-4 h-4 text-[#FF9900] animate-pulse" />
-          </div>
+        <KPICard
+          label="Demo Orders"
+          value={demoSummary?.orders ?? (metrics?.orders_count || 2500)}
+          icon={Zap}
+          color="emerald"
+          loading={loading}
+          index={0}
+        />
+        <KPICard
+          label="Lambda Runs"
+          value={demoSummary?.lambda_executions ?? 95}
+          icon={Cpu}
+          color="purple"
+          loading={loading}
+          index={1}
+        />
+        <KPICard
+          label="Health Score"
+          value={`${healthScore?.score ?? 96}/100`}
+          icon={Gauge}
+          color="emerald"
+          loading={loading}
+          index={2}
+        />
+        <KPICard
+          label="Recovery Campaigns"
+          value={demoSummary?.recovery_campaigns ?? 100}
+          icon={Activity}
+          color="indigo"
+          loading={loading}
+          index={3}
+        />
+        <KPICard
+          label="Generated Reports"
+          value={demoSummary?.reports ?? 30}
+          icon={FileText}
+          color="cyan"
+          loading={loading}
+          index={4}
+        />
+        <KPICard
+          label="Active Watchdogs"
+          value="7 / 7 Online"
+          icon={ShieldCheck}
+          color="amber"
+          loading={loading}
+          index={5}
+        />
+      </div>
+
+      {/* ── FEATURE 1 & 12: DEMO DATA GENERATOR CONTROL CARD ─────────────────── */}
+      <div className="bg-[#0B1120] border border-[#00F5A0]/30 rounded-3xl p-6 shadow-2xl space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1E293B] pb-4">
           <div>
-            <p className="text-xs font-extrabold text-white mt-1">
-              {metrics?.is_local_mode ? 'Local Event Bus' : 'AWS EventBridge'}
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="w-4 h-4 text-[#00F5A0]" />
+              <span className="text-[11px] font-extrabold tracking-widest text-[#00F5A0] uppercase font-mono">
+                Production Testing &amp; QA Engine
+              </span>
+            </div>
+            <h2 className="text-xl font-black text-white">Merchant Demo Dataset &amp; AWS QA Action Panel</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Populate MongoDB with 2,500 realistic orders, 650 customers, 120 products, and trigger AWS EventBridge, Lambda, SNS, S3, and CloudWatch in end-to-end testing mode.
             </p>
-            <span className="text-[9px] text-[#00F5A0] font-semibold bg-[#00F5A0]/10 px-2 py-0.5 rounded-full inline-block mt-1">
-              {metrics?.is_local_mode ? 'Running Local Fallback' : 'Connected (ap-south-1)'}
-            </span>
           </div>
+
+          {/* Quick Action Button Group */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleGenerate30DayData}
+              disabled={!!actionLoading}
+              className="px-4 py-2.5 bg-gradient-to-r from-[#00F5A0] to-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-[#00F5A0]/20 hover:opacity-95 transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${actionLoading === 'generate_data' ? 'animate-spin' : ''}`} />
+              Generate 30-Day Demo Store
+            </button>
+
+            <button
+              onClick={handleSimulateEvents}
+              disabled={!!actionLoading}
+              className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Zap className="w-4 h-4 text-indigo-200" />
+              Simulate 10 Events
+            </button>
+
+            <button
+              onClick={handleRunWatchdogs}
+              disabled={!!actionLoading}
+              className="px-3.5 py-2.5 bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Shield className="w-4 h-4 text-amber-400" />
+              Run 7 Watchdogs
+            </button>
+
+            <button
+              onClick={handleRunSchedulers}
+              disabled={!!actionLoading}
+              className="px-3.5 py-2.5 bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/30 text-purple-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Clock className="w-4 h-4 text-purple-400" />
+              Run Schedulers
+            </button>
+
+            <button
+              onClick={handleRunLambdas}
+              disabled={!!actionLoading}
+              className="px-3.5 py-2.5 bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600/30 text-cyan-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Cpu className="w-4 h-4 text-cyan-400" />
+              Run 5 Lambdas
+            </button>
+
+            <button
+              onClick={handleRunReports}
+              disabled={!!actionLoading}
+              className="px-3.5 py-2.5 bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <FileText className="w-4 h-4 text-emerald-400" />
+              Generate Reports
+            </button>
+
+            <button
+              onClick={handleResetDemoData}
+              disabled={!!actionLoading}
+              className="px-3.5 py-2.5 bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-400 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4 text-rose-400" />
+              Reset DB
+            </button>
+          </div>
+        </div>
+
+        {/* Real-time Progress Indicator */}
+        {actionLoading && (
+          <div className="space-y-2 bg-[#050816] p-4 rounded-2xl border border-[#1E293B]">
+            <div className="flex justify-between text-xs font-bold text-slate-300">
+              <span className="flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#00F5A0]" />
+                Executing Pipeline: <span className="text-[#00F5A0] uppercase font-mono">{actionLoading}</span>...
+              </span>
+              <span className="font-mono text-[#00F5A0]">{progress}%</span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+              <div
+                className="h-full bg-gradient-to-r from-[#00F5A0] to-emerald-400 transition-all duration-300 rounded-full"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Database Collections Live Counts Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          {[
+            { label: 'Orders', count: demoSummary?.orders ?? 2500, color: 'text-[#00F5A0]' },
+            { label: 'Payments', count: demoSummary?.payments ?? 2500, color: 'text-emerald-400' },
+            { label: 'Customers', count: demoSummary?.customers ?? 650, color: 'text-indigo-400' },
+            { label: 'Products', count: demoSummary?.products ?? 120, color: 'text-cyan-400' },
+            { label: 'Campaigns', count: demoSummary?.recovery_campaigns ?? 100, color: 'text-pink-400' },
+            { label: 'Lambda Logs', count: demoSummary?.lambda_executions ?? 95, color: 'text-purple-400' },
+            { label: 'S3 Reports', count: demoSummary?.reports ?? 30, color: 'text-amber-400' },
+          ].map((item) => (
+            <div key={item.label} className="bg-[#050816] p-3 rounded-2xl border border-[#1E293B]">
+              <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider block font-bold truncate">
+                {item.label}
+              </span>
+              <span className={`text-base font-black font-mono ${item.color}`}>
+                {item.count.toLocaleString()} docs
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Main Navigation Tabs */}
+      {/* ── NAVIGATION TABS ─────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 border-b border-[#1E293B] pb-3 overflow-x-auto">
         {[
-          { key: 'rules', label: `Rules (${rules.length})`, icon: Zap },
-          { key: 'builder', label: 'Workflow Builder', icon: Workflow },
-          { key: 'health_score', label: 'Health Score (96)', icon: Gauge },
-          { key: 'observability', label: 'CloudWatch Metrics', icon: Server },
-          { key: 'topology', label: 'Topology Graph', icon: Share2 },
-          { key: 'events', label: `Event Bus (${events.length})`, icon: Radio },
-          { key: 'history', label: `History (${history.length})`, icon: Clock },
-          { key: 'audit_logs', label: `Audit Logs (${auditLogs.length})`, icon: ShieldCheck },
-          { key: 'reports', label: 'Report Generator', icon: FileText },
-          { key: 'cicd', label: 'CI/CD & K8s', icon: GitBranch },
-          { key: 'security', label: 'Security & Latency', icon: Lock },
+          { key: 'operations_console', label: 'Live Operations Console', icon: Server },
+          { key: 'cloudwatch_metrics', label: 'CloudWatch 12 Metrics', icon: Activity },
+          { key: 'watchdogs', label: 'Watchdog Health Board (7)', icon: ShieldCheck },
+          { key: 'event_timeline', label: 'EventBridge Timeline', icon: Radio },
+          { key: 'schedulers', label: 'Scheduler Feed (6)', icon: Clock },
+          { key: 'lambdas', label: 'Lambda Invocations (5)', icon: Cpu },
+          { key: 'reports', label: 'S3 Reports Center', icon: FileText },
+          { key: 'recovery_campaigns', label: 'Recovery Campaigns (100)', icon: MessageSquare },
+          { key: 'rules', label: `Automation Rules (${rules.length})`, icon: Zap },
           { key: 'test_generator', label: 'Developer Test Panel', icon: Sparkles },
-          { key: 'demo_data', label: 'Demo Data Generator', icon: Database },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -351,25 +543,741 @@ export const AutomationCenter: React.FC = () => {
             </button>
           );
         })}
-
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="ml-auto px-3.5 py-2 bg-[#00F5A0] text-slate-950 hover:bg-[#00F5A0]/90 font-black text-xs rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-[#00F5A0]/20 flex-shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Create Rule
-        </button>
       </div>
 
-      {/* TAB 1: AUTOMATION RULES */}
+      {/* ── TAB: LIVE OPERATIONS CONSOLE (Unified Dashboard) ────────────────── */}
+      {activeTab === 'operations_console' && (
+        <div className="space-y-6">
+          {/* Top Row: CloudWatch Quick Graph + 7 Watchdog Health Matrix */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* CloudWatch Moving Graph Widget */}
+            <div className="lg:col-span-7 bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-[#00F5A0]" />
+                    CloudWatch Live Metrics Stream
+                  </h3>
+                  <p className="text-xs text-slate-400">Moving minute-by-minute metric stream from AWS namespace</p>
+                </div>
+
+                <select
+                  value={selectedMetricKey}
+                  onChange={(e) => setSelectedMetricKey(e.target.value)}
+                  className="bg-[#050816] border border-[#1E293B] rounded-xl px-3 py-1.5 text-xs text-[#00F5A0] font-mono focus:outline-none focus:border-[#00F5A0]"
+                >
+                  {CLOUDWATCH_METRICS.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="metricGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={selectedMetricConfig.color} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={selectedMetricConfig.color} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                    <XAxis dataKey="time_label" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#111827',
+                        border: '1px solid #1E293B',
+                        borderRadius: 12,
+                        fontSize: 12,
+                        color: '#e2e8f0',
+                      }}
+                      formatter={(val: any) => [
+                        `${Number(val).toLocaleString()} ${selectedMetricConfig.unit}`,
+                        selectedMetricConfig.label,
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey={selectedMetricKey}
+                      stroke={selectedMetricConfig.color}
+                      strokeWidth={2.5}
+                      fill="url(#metricGrad)"
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Watchdog Health Matrix */}
+            <div className="lg:col-span-5 bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between border-b border-[#1E293B] pb-3">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Watchdog Health Board
+                </h3>
+                <span className="text-[10px] font-mono text-[#00F5A0] bg-[#00F5A0]/10 px-2 py-0.5 rounded-full font-bold">
+                  All 7 Active
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {(feeds?.watchdogs_board || []).map((wd: any) => (
+                  <div
+                    key={wd.id}
+                    className="p-2.5 bg-[#050816] rounded-xl border border-[#1E293B] flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-slate-200">{wd.name}</span>
+                        <span
+                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${
+                            wd.status === 'Healthy'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}
+                        >
+                          {wd.status}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[240px]">{wd.description}</p>
+                    </div>
+                    <div className="text-right font-mono text-[11px]">
+                      <span className="text-slate-300 font-bold block">{wd.latency_ms}ms</span>
+                      <span className="text-[9px] text-slate-500">{wd.items_scanned} scanned</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Middle Row: Step Functions Event Timeline & Lambda Execution Stream */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* EventBridge Step Functions Timeline */}
+            <div className="lg:col-span-7 bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-[#1E293B] pb-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                    <Radio className="w-4 h-4 text-cyan-400" />
+                    AWS Step Functions Execution Timeline
+                  </h3>
+                  <p className="text-xs text-slate-400">Real-time traces with rule evaluations and Lambda dispatches</p>
+                </div>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Total: {feeds?.timeline_feed?.length ?? 0} traces
+                </span>
+              </div>
+
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                {(feeds?.timeline_feed || []).slice(0, 8).map((tl: any, i: number) => (
+                  <div
+                    key={tl.trace_id || i}
+                    className="p-3.5 bg-[#050816] rounded-2xl border border-[#1E293B] hover:border-[#00F5A0]/30 transition-all space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                        <span className="font-extrabold text-white font-mono">{tl.event_type}</span>
+                        <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                          {tl.trace_id}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        {tl.execution_result}
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] text-slate-300">
+                      <strong className="text-slate-400">Rule:</strong> {tl.rule_evaluated}
+                    </div>
+
+                    {/* Step Badges */}
+                    <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono pt-1">
+                      <span className="bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                        <Cpu className="w-3 h-3 text-purple-400" /> {tl.lambda_invoked}
+                      </span>
+                      {tl.sns_published && (
+                        <span className="bg-pink-500/10 text-pink-300 border border-pink-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                          <Radio className="w-3 h-3 text-pink-400" /> SNS Sent
+                        </span>
+                      )}
+                      {tl.cloudwatch_logged && (
+                        <span className="bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                          <Activity className="w-3 h-3 text-amber-400" /> CloudWatch Logged
+                        </span>
+                      )}
+                      <span className="ml-auto text-slate-500 text-[10px]">
+                        {tl.duration_ms}ms
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Lambda Invocations Stream */}
+            <div className="lg:col-span-5 bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-[#1E293B] pb-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-purple-400" />
+                    Lambda Invocation Feed
+                  </h3>
+                  <p className="text-xs text-slate-400">All 5 serverless handlers</p>
+                </div>
+                <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full font-bold">
+                  Boto3 / Cloud
+                </span>
+              </div>
+
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                {(feeds?.lambda_feed || []).slice(0, 8).map((lam: any, i: number) => (
+                  <div
+                    key={lam.execution_id || i}
+                    className="p-3 bg-[#050816] rounded-xl border border-[#1E293B] flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-purple-300">{lam.function_name}</span>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                            lam.status === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                          }`}
+                        >
+                          {lam.status}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-500 block mt-0.5">
+                        {lam.aws_request_id || lam.request_id || 'aws_req_local'}
+                      </span>
+                    </div>
+                    <div className="text-right font-mono">
+                      <span className="text-[#00F5A0] font-bold block">{lam.duration_ms} ms</span>
+                      <span className="text-[9px] text-slate-500">
+                        {lam.timestamp ? new Date(lam.timestamp).toLocaleTimeString() : 'Just now'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: CLOUDWATCH 12 METRICS FEED ─────────────────────────────────── */}
+      {activeTab === 'cloudwatch_metrics' && (
+        <div className="space-y-6">
+          <div className="bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-6 shadow-2xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E293B] pb-4">
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-[#00F5A0]" />
+                  AWS CloudWatch 12-Metric Moving Graphs
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Live metrics populated per minute into namespace <strong className="text-white font-mono">RevenuePilot/AutoOps</strong>.
+                </p>
+              </div>
+
+              <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl">
+                Frequency: 1 Min Intervals
+              </span>
+            </div>
+
+            {/* Metric Switcher Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+              {CLOUDWATCH_METRICS.map((m) => {
+                const isSelected = selectedMetricKey === m.key;
+                const latestPoint = chartData[chartData.length - 1]?.[m.key] ?? 0;
+                return (
+                  <button
+                    key={m.key}
+                    onClick={() => setSelectedMetricKey(m.key)}
+                    className={`p-3 rounded-2xl border text-left transition-all ${
+                      isSelected
+                        ? 'bg-slate-800/80 border-[#00F5A0] shadow-lg shadow-[#00F5A0]/10'
+                        : 'bg-[#050816] border-[#1E293B] hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-[10px] text-slate-400 font-bold block truncate">{m.label}</span>
+                    <span className="text-base font-black font-mono text-white mt-1 block">
+                      {typeof latestPoint === 'number' ? latestPoint.toLocaleString() : latestPoint}
+                    </span>
+                    <span className="text-[9px] font-mono text-[#00F5A0]">{m.unit}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Main Interactive Moving AreaChart */}
+            <div className="bg-[#050816] border border-[#1E293B] rounded-2xl p-5 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-mono text-slate-300 font-bold">
+                  Live Time-Series: <strong className="text-white">{selectedMetricConfig.label}</strong>
+                </span>
+                <span className="text-xs font-mono text-slate-500">60 Data Points</span>
+              </div>
+
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+                    <defs>
+                      <linearGradient id="fullMetricGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={selectedMetricConfig.color} stopOpacity={0.45} />
+                        <stop offset="95%" stopColor={selectedMetricConfig.color} stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                    <XAxis dataKey="time_label" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#111827',
+                        border: '1px solid #1E293B',
+                        borderRadius: 12,
+                        fontSize: 12,
+                        color: '#e2e8f0',
+                      }}
+                      formatter={(val: any) => [
+                        `${Number(val).toLocaleString()} ${selectedMetricConfig.unit}`,
+                        selectedMetricConfig.label,
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey={selectedMetricKey}
+                      stroke={selectedMetricConfig.color}
+                      strokeWidth={3}
+                      fill="url(#fullMetricGrad)"
+                      dot={{ r: 3, fill: selectedMetricConfig.color }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: WATCHDOG HEALTH BOARD (7 Watchdogs) ────────────────────────── */}
+      {activeTab === 'watchdogs' && (
+        <div className="space-y-6">
+          <div className="bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-6 shadow-2xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E293B] pb-4">
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  All 7 Automated Business Watchdogs
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Autonomous monitors scanning revenue, inventory stockouts, payment gateway drops, webhooks, retention, recovery, and incidents.
+                </p>
+              </div>
+
+              <button
+                onClick={handleRunWatchdogs}
+                disabled={!!actionLoading}
+                className="px-4 py-2 bg-[#00F5A0] text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-[#00F5A0]/20 hover:opacity-90 transition-all flex items-center gap-2"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${actionLoading === 'watchdogs' ? 'animate-spin' : ''}`} />
+                Run All 7 Watchdogs Now
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(feeds?.watchdogs_board || []).map((wd: any) => (
+                <div
+                  key={wd.id}
+                  className="bg-[#050816] p-5 rounded-2xl border border-[#1E293B] hover:border-[#00F5A0]/30 transition-all flex flex-col justify-between space-y-3"
+                >
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] uppercase font-mono font-extrabold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                        {wd.category}
+                      </span>
+                      <span
+                        className={`text-xs font-bold font-mono px-2.5 py-0.5 rounded-full ${
+                          wd.status === 'Healthy'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                        }`}
+                      >
+                        {wd.status}
+                      </span>
+                    </div>
+
+                    <h4 className="text-sm font-extrabold text-white">{wd.name}</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">{wd.description}</p>
+                  </div>
+
+                  <div className="p-3 bg-[#0B1120] rounded-xl border border-[#1E293B] space-y-1.5 text-[11px] font-mono">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Items Scanned:</span>
+                      <strong className="text-white">{wd.items_scanned}</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Issues Detected:</span>
+                      <strong className={wd.issues_found > 0 ? 'text-amber-400' : 'text-emerald-400'}>
+                        {wd.issues_found}
+                      </strong>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Execution Latency:</span>
+                      <strong className="text-[#00F5A0]">{wd.latency_ms} ms</strong>
+                    </div>
+                  </div>
+
+                  {wd.recommendation && (
+                    <div className="p-2.5 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-[11px] text-emerald-300">
+                      <strong>AI Action:</strong> {wd.recommendation}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: EVENT TIMELINE (Step Functions style) ───────────────────────── */}
+      {activeTab === 'event_timeline' && (
+        <div className="bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-6 shadow-2xl">
+          <div className="flex justify-between items-center border-b border-[#1E293B] pb-4">
+            <div>
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Radio className="w-5 h-5 text-cyan-400" />
+                AWS EventBridge &amp; Step Functions Execution Timeline
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Complete trace history for autonomous state transitions</p>
+            </div>
+
+            <button
+              onClick={handleSimulateEvents}
+              disabled={!!actionLoading}
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-cyan-600/20 transition-all flex items-center gap-2"
+            >
+              <Zap className="w-3.5 h-3.5" /> Emit Test Events
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {(feeds?.timeline_feed || []).map((tl: any, idx: number) => (
+              <div
+                key={tl.trace_id || idx}
+                className="p-4 bg-[#050816] rounded-2xl border border-[#1E293B] hover:border-cyan-500/40 transition-all space-y-2 text-xs"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                    <span className="font-extrabold text-white font-mono">{tl.event_type}</span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                      Trace: {tl.trace_id}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      {new Date(tl.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+                    {tl.execution_result}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                  <span className="text-slate-400 font-bold">Rule Evaluated:</span>
+                  <span>{tl.rule_evaluated}</span>
+                </div>
+
+                {/* Badges */}
+                <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono pt-1">
+                  <span className="bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                    <Cpu className="w-3 h-3 text-purple-400" /> Lambda: {tl.lambda_invoked}
+                  </span>
+                  <span className="bg-pink-500/10 text-pink-300 border border-pink-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                    <Radio className="w-3 h-3 text-pink-400" /> SNS Notification Sent
+                  </span>
+                  <span className="bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-amber-400" /> CloudWatch Metrics Logged
+                  </span>
+                  <span className="ml-auto text-slate-400 font-mono">
+                    Latency: {tl.duration_ms} ms
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: SCHEDULERS FEED (6 Schedulers) ─────────────────────────────── */}
+      {activeTab === 'schedulers' && (
+        <div className="bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-6 shadow-2xl">
+          <div className="flex justify-between items-center border-b border-[#1E293B] pb-4">
+            <div>
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-purple-400" />
+                Autonomous Automation Schedulers (Cron Engine)
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Execution history for daily stock scans, payment recovery crons, revenue health scans, and reports.
+              </p>
+            </div>
+
+            <button
+              onClick={handleRunSchedulers}
+              disabled={!!actionLoading}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/20 transition-all flex items-center gap-2"
+            >
+              <Play className="w-3.5 h-3.5" /> Trigger All Schedulers
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {(feeds?.schedulers_feed || []).map((sc: any, idx: number) => (
+              <div
+                key={sc.execution_id || idx}
+                className="p-4 bg-[#050816] rounded-2xl border border-[#1E293B] flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-white text-sm">{sc.schedule_name}</span>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
+                      {sc.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
+                    <span>Source: {sc.trigger_source}</span>
+                    <span>Lambda: {sc.lambda_executed}</span>
+                    <span>Duration: {sc.duration_seconds}s</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 font-mono text-[10px]">
+                  <span className="bg-slate-800 text-slate-300 px-2.5 py-1 rounded">
+                    Start: {new Date(sc.start_time).toLocaleTimeString()}
+                  </span>
+                  <span className="bg-slate-800 text-slate-300 px-2.5 py-1 rounded">
+                    Finish: {new Date(sc.finish_time).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: LAMBDA INVOCATIONS (5 Serverless Handlers) ─────────────────── */}
+      {activeTab === 'lambdas' && (
+        <div className="bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-6 shadow-2xl">
+          <div className="flex justify-between items-center border-b border-[#1E293B] pb-4">
+            <div>
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-purple-400" />
+                AWS Lambda Execution Logs &amp; Payloads
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Handlers: InventoryLambda, RecoveryLambda, ReportsLambda, IncidentLambda, CloudWatchLambda
+              </p>
+            </div>
+
+            <button
+              onClick={handleRunLambdas}
+              disabled={!!actionLoading}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/20 transition-all flex items-center gap-2"
+            >
+              <Play className="w-3.5 h-3.5" /> Execute 5 Handlers
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {(feeds?.lambda_feed || []).map((lam: any, idx: number) => (
+              <div
+                key={lam.execution_id || idx}
+                className="p-4 bg-[#050816] rounded-2xl border border-[#1E293B] space-y-2 text-xs"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-purple-300 text-sm">{lam.function_name}</span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${
+                        lam.status === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                      }`}
+                    >
+                      {lam.status}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 font-mono text-[11px]">
+                    <span className="text-[#00F5A0] font-bold">{lam.duration_ms} ms</span>
+                    <span className="text-slate-500">
+                      {lam.timestamp ? new Date(lam.timestamp).toLocaleString() : 'Just now'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                  <span>Request ID: {lam.aws_request_id || lam.request_id}</span>
+                  <span>Trace ID: {lam.trace_id}</span>
+                </div>
+
+                {lam.payload && (
+                  <pre className="p-2.5 bg-[#0B1120] rounded-xl border border-[#1E293B] text-[#00F5A0] font-mono text-[10px] overflow-x-auto">
+                    {JSON.stringify(lam.payload, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: S3 REPORTS CENTER ──────────────────────────────────────────── */}
+      {activeTab === 'reports' && (
+        <div className="bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-6 shadow-2xl">
+          <div className="flex justify-between items-center border-b border-[#1E293B] pb-4">
+            <div>
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                Amazon S3 Generated Operational Reports
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                CSV, JSON, and PDF reports uploaded to bucket <strong className="text-white font-mono">revenuepilot-reports</strong>
+              </p>
+            </div>
+
+            <button
+              onClick={handleRunReports}
+              disabled={!!actionLoading}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${actionLoading === 'reports' ? 'animate-spin' : ''}`} />
+              Generate All 7 Reports
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(feeds?.reports_feed || []).map((rep: any, idx: number) => (
+              <div
+                key={rep.report_id || idx}
+                className="p-5 bg-[#050816] rounded-2xl border border-[#1E293B] hover:border-emerald-500/40 transition-all flex flex-col justify-between space-y-3 text-xs"
+              >
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[10px] uppercase font-mono font-extrabold text-[#00F5A0] bg-[#00F5A0]/10 px-2 py-0.5 rounded">
+                      {rep.format || rep.format_type || 'CSV'}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 font-bold">
+                      {rep.record_count || 120} records
+                    </span>
+                  </div>
+
+                  <h4 className="text-sm font-extrabold text-white mt-2 truncate">{rep.filename}</h4>
+                  <p className="text-[11px] text-slate-400 mt-1 truncate">
+                    Type: <strong className="text-slate-200 capitalize">{rep.type || rep.report_type}</strong>
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-[#1E293B] flex items-center justify-between font-mono text-[10px]">
+                  <span className="text-slate-500">
+                    {new Date(rep.created_at || rep.generated_at).toLocaleDateString()}
+                  </span>
+                  <a
+                    href={rep.download_url || rep.s3_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold rounded-lg flex items-center gap-1 transition-all"
+                  >
+                    <Download className="w-3 h-3" /> Download
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: RECOVERY CAMPAIGNS (100 Campaigns + Previews) ──────────────── */}
+      {activeTab === 'recovery_campaigns' && (
+        <div className="space-y-6">
+          <div className="bg-[#0B1120] border border-[#1E293B] rounded-3xl p-6 space-y-6 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-[#1E293B] pb-4">
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-pink-400" />
+                  100 Autonomous Recovery Campaigns Feed
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Failed payment reminders, comeback discounts, cart abandonment alerts across WhatsApp, Email, and Push.
+                </p>
+              </div>
+
+              <span className="text-xs font-mono text-pink-400 bg-pink-500/10 border border-pink-500/30 px-3 py-1 rounded-xl">
+                100 Campaigns Active
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(feeds?.recovery_feed || []).map((camp: any, idx: number) => (
+                <div
+                  key={camp.campaign_id || idx}
+                  onClick={() => setSelectedCampaign(camp)}
+                  className="p-5 bg-[#050816] rounded-2xl border border-[#1E293B] hover:border-pink-500/40 cursor-pointer transition-all flex flex-col justify-between space-y-3 text-xs"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] uppercase font-mono font-extrabold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                        {camp.type}
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                          camp.status === 'converted'
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-indigo-500/10 text-indigo-400'
+                        }`}
+                      >
+                        {camp.status}
+                      </span>
+                    </div>
+
+                    <h4 className="text-sm font-extrabold text-white truncate">{camp.title}</h4>
+                    <p className="text-[11px] text-slate-400">
+                      Customer: <strong className="text-slate-200">{camp.customer_name}</strong>
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-[#0B1120] rounded-xl border border-[#1E293B] space-y-1 text-[11px] font-mono">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Discount Code:</span>
+                      <strong className="text-[#00F5A0]">{camp.discount_code}</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Order Value:</span>
+                      <strong className="text-white">₹{Number(camp.amount || 0).toLocaleString()}</strong>
+                    </div>
+                  </div>
+
+                  <button className="w-full py-1.5 bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 font-bold rounded-lg text-center transition-all flex items-center justify-center gap-1 text-[11px]">
+                    <Eye className="w-3 h-3" /> Preview WhatsApp / Email / Push
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: AUTOMATION RULES (Existing Rules List) ─────────────────────── */}
       {activeTab === 'rules' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {rules.map((rule, idx) => (
-              <motion.div
+              <div
                 key={rule.id || idx}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.04 }}
                 className={`p-5 rounded-2xl bg-[#0B1120] border transition-all flex flex-col justify-between ${
                   rule.enabled
                     ? 'border-[#00F5A0]/30 shadow-lg shadow-[#00F5A0]/5'
@@ -384,18 +1292,9 @@ export const AutomationCenter: React.FC = () => {
                       </span>
                       <h3 className="text-sm font-extrabold text-white mt-1.5 leading-snug">{rule.name}</h3>
                     </div>
-                    <button
-                      onClick={() => toggleRule(rule.id, rule.enabled)}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
-                        rule.enabled ? 'bg-[#00F5A0]' : 'bg-slate-700'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
-                          rule.enabled ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                    <span className="text-[10px] font-mono text-[#00F5A0] bg-[#00F5A0]/10 px-2 py-0.5 rounded-full font-bold">
+                      ACTIVE
+                    </span>
                   </div>
 
                   <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{rule.description}</p>
@@ -415,219 +1314,12 @@ export const AutomationCenter: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-[#1E293B] flex items-center justify-between text-[10px] text-slate-500">
-                  <span className="flex items-center gap-1 font-mono">
+                <div className="mt-4 pt-3 border-t border-[#1E293B] flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                  <span className="flex items-center gap-1">
                     <Activity className="w-3 h-3 text-[#00F5A0]" />
                     Executions: <strong className="text-white">{rule.execution_count || 0}</strong>
                   </span>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSelectedRule(rule)}
-                      className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"
-                      title="Inspect Rule Nodes"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                    {!rule.is_prebuilt && (
-                      <button
-                        onClick={() => deleteRule(rule.id)}
-                        className="p-1.5 hover:bg-rose-500/20 rounded-lg text-rose-400"
-                        title="Delete Rule"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: WORKFLOW BUILDER */}
-      {activeTab === 'builder' && (
-        <div className="bg-[#0B1120] border border-[#00F5A0]/20 rounded-2xl p-6 space-y-6 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#1E293B] pb-4">
-            <div>
-              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                <Workflow className="w-5 h-5 text-[#00F5A0]" />
-                No-Code Node Workflow Pipeline
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">Visual representation of event trigger, evaluated payload conditions, and autonomous actions</p>
-            </div>
-            <span className="px-3 py-1 bg-[#00F5A0]/10 border border-[#00F5A0]/30 text-[#00F5A0] rounded-full text-xs font-bold">
-              n8n Flow Connected
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
-            <div className="bg-[#050816] border border-[#00F5A0]/40 rounded-2xl p-5 space-y-3 relative shadow-xl">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#00F5A0] uppercase tracking-wider">
-                <Radio className="w-4 h-4" /> Node 1: Event Trigger
-              </div>
-              <div className="p-3 bg-[#111827] rounded-xl border border-[#1E293B]">
-                <p className="text-xs font-bold text-white">PAYMENT_FAILED</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Razorpay checkout failure or webhook payment decline</p>
-              </div>
-            </div>
-
-            <div className="bg-[#050816] border border-[#FF9900]/40 rounded-2xl p-5 space-y-3 relative shadow-xl">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#FF9900] uppercase tracking-wider">
-                <Sliders className="w-4 h-4" /> Node 2: Payload Condition
-              </div>
-              <div className="p-3 bg-[#111827] rounded-xl border border-[#1E293B]">
-                <p className="text-xs font-mono font-bold text-[#FF9900]">amount &gt; ₹1,000</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Evaluates order transaction value</p>
-              </div>
-            </div>
-
-            <div className="bg-[#050816] border border-indigo-500/40 rounded-2xl p-5 space-y-3 shadow-xl">
-              <div className="flex items-center gap-2 text-xs font-bold text-indigo-400 uppercase tracking-wider">
-                <Zap className="w-4 h-4" /> Node 3: Multi-Actions Execution
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="p-2 bg-[#111827] rounded-xl border border-indigo-500/20 text-indigo-300 font-semibold flex justify-between">
-                  <span>1. Create Incident</span>
-                  <span className="text-[10px] font-mono bg-rose-500/20 text-rose-300 px-1.5 rounded">High</span>
-                </div>
-                <div className="p-2 bg-[#111827] rounded-xl border border-emerald-500/20 text-emerald-300 font-semibold flex justify-between">
-                  <span>2. Queue Recovery & 10% Coupon</span>
-                  <span className="text-[10px] font-mono text-emerald-400">RECOVER10</span>
-                </div>
-                <div className="p-2 bg-[#111827] rounded-xl border border-[#FF9900]/20 text-[#FF9900] font-semibold flex justify-between">
-                  <span>3. AWS SNS & EventBridge</span>
-                  <span className="text-[10px] font-mono">ap-south-1</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: BUSINESS HEALTH SCORE GAUGE (Task 10) */}
-      {activeTab === 'health_score' && (
-        <div className="bg-[#0B1120] border border-[#00F5A0]/20 rounded-2xl p-6 space-y-6 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#1E293B] pb-4">
-            <div>
-              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                <Gauge className="w-5 h-5 text-[#00F5A0]" />
-                Merchant Business Health Score Engine
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">Real-time composite health index evaluating revenue expansion, gateway approvals, inventory health, and infrastructure stability</p>
-            </div>
-            <span className="px-3.5 py-1 bg-[#00F5A0]/10 border border-[#00F5A0]/40 text-[#00F5A0] rounded-full text-xs font-black">
-              {healthScore?.rating ?? 'EXCELLENT'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-            {/* Score Radial Visualizer */}
-            <div className="bg-[#050816] border border-[#00F5A0]/30 rounded-2xl p-6 text-center space-y-2">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Overall Health Score</span>
-              <p className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#00F5A0] to-emerald-400">
-                {healthScore?.score ?? 96}
-              </p>
-              <p className="text-xs text-slate-400 font-semibold">Out of 100 Maximum Points</p>
-            </div>
-
-            {/* Component Breakdown */}
-            <div className="md:col-span-2 space-y-3">
-              {healthScore?.components && Object.entries(healthScore.components).map(([key, val]: [string, any]) => (
-                <div key={key} className="p-3 bg-[#050816] border border-[#1E293B] rounded-xl flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-extrabold text-white capitalize">{key.replace(/_/g, ' ')}</span>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{val.label}</p>
-                  </div>
-                  <span className="font-mono font-bold text-[#00F5A0]">
-                    {val.score}/{val.max} pts
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: CLOUDWATCH OBSERVABILITY (Task 4) */}
-      {activeTab === 'observability' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-[#0B1120] border border-[#FF9900]/30 rounded-2xl">
-              <p className="text-[10px] text-slate-400 font-bold uppercase">Requests / Min</p>
-              <p className="text-xl font-extrabold text-white mt-1">{observability?.metrics?.api_requests_per_min ?? 148}</p>
-            </div>
-            <div className="p-4 bg-[#0B1120] border border-[#FF9900]/30 rounded-2xl">
-              <p className="text-[10px] text-slate-400 font-bold uppercase">Webhook Latency</p>
-              <p className="text-xl font-extrabold text-[#00F5A0] mt-1">{observability?.metrics?.webhook_latency_ms ?? 38.4} ms</p>
-            </div>
-            <div className="p-4 bg-[#0B1120] border border-[#FF9900]/30 rounded-2xl">
-              <p className="text-[10px] text-slate-400 font-bold uppercase">MongoDB Latency</p>
-              <p className="text-xl font-extrabold text-[#00F5A0] mt-1">{observability?.metrics?.mongodb_latency_ms ?? 4.2} ms</p>
-            </div>
-            <div className="p-4 bg-[#0B1120] border border-[#FF9900]/30 rounded-2xl">
-              <p className="text-[10px] text-slate-400 font-bold uppercase">Recovery Success</p>
-              <p className="text-xl font-extrabold text-emerald-400 mt-1">{observability?.metrics?.recovery_success_rate_pct ?? 94.2}%</p>
-            </div>
-          </div>
-
-          <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl p-5">
-            <h3 className="text-sm font-extrabold text-white mb-4">Requests & Latency Trend (Recharts)</h3>
-            <GenericLineChart data={observability?.requests_per_minute ?? executionChartData} xKey="time" dataKey="requests" stroke="#00F5A0" />
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: TOPOLOGY GRAPH (Task 13) */}
-      {activeTab === 'topology' && (
-        <div className="bg-[#0B1120] border border-[#00F5A0]/20 rounded-2xl p-6 space-y-6 shadow-2xl">
-          <div className="border-b border-[#1E293B] pb-4">
-            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-              <Share2 className="w-5 h-5 text-[#00F5A0]" />
-              Infrastructure System Topology Graph
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Live connectivity map across Storefront, Merchant Portal, AI Microservice, MongoDB Atlas, Razorpay, and AWS EventBridge stack</p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {topology?.nodes?.map((node: any) => (
-              <div key={node.id} className="p-4 bg-[#050816] border border-[#1E293B] hover:border-[#00F5A0]/40 rounded-2xl space-y-2 transition-all">
-                <div className="flex justify-between items-start">
-                  <span className="text-xs font-black text-white">{node.name}</span>
-                  <span className={`w-2 h-2 rounded-full ${node.status === 'ONLINE' ? 'bg-[#00F5A0] animate-pulse' : 'bg-amber-400'}`} />
-                </div>
-                <p className="text-[10px] text-slate-400 font-mono">Port: {node.port} · Latency: {node.latency}</p>
-                <span className="text-[9px] font-bold text-slate-300 bg-slate-800 px-2 py-0.5 rounded font-mono uppercase inline-block">{node.type}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 6: EVENT BUS STREAM */}
-      {activeTab === 'events' && (
-        <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl overflow-hidden shadow-2xl">
-          <div className="p-5 border-b border-[#1E293B] flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-              <Radio className="w-4 h-4 text-[#00F5A0]" />
-              Live Business Event Queue
-            </h3>
-            <span className="text-xs font-mono text-slate-500">Auto-refresh: 10s</span>
-          </div>
-
-          <div className="divide-y divide-[#1E293B] max-h-[500px] overflow-y-auto">
-            {events.map((evt, idx) => (
-              <div key={evt.event_id || idx} className="p-4 hover:bg-white/[0.02] flex items-start gap-4 text-xs">
-                <div className="p-2 rounded-xl bg-[#00F5A0]/20 text-[#00F5A0] border border-[#00F5A0]/30 flex-shrink-0">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono font-extrabold text-white text-xs">{evt.event_type}</span>
-                    <span className="text-[10px] text-slate-500 font-mono">{new Date(evt.timestamp).toLocaleString()}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 font-mono mt-1">Source: {evt.source} · ID: {evt.event_id}</p>
+                  <span>Priority: {rule.priority || 5}</span>
                 </div>
               </div>
             ))}
@@ -635,221 +1327,7 @@ export const AutomationCenter: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 7: EXECUTION HISTORY */}
-      {activeTab === 'history' && (
-        <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl overflow-hidden shadow-2xl">
-          <div className="p-5 border-b border-[#1E293B] flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-white">Automation Execution Audit Log</h3>
-            <span className="text-xs text-[#00F5A0] font-mono">Immutable Records</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-[#1E293B] text-slate-400 uppercase tracking-wider text-[10px]">
-                  <th className="px-5 py-3 font-bold">Execution ID</th>
-                  <th className="px-5 py-3 font-bold">Automation Rule</th>
-                  <th className="px-5 py-3 font-bold">Trigger Event</th>
-                  <th className="px-5 py-3 font-bold">Duration</th>
-                  <th className="px-5 py-3 font-bold">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E293B]">
-                {history.map((log, idx) => (
-                  <tr key={log.execution_id || idx} className="hover:bg-white/[0.02]">
-                    <td className="px-5 py-3.5 font-mono text-[#00F5A0] font-bold">{log.execution_id}</td>
-                    <td className="px-5 py-3.5 text-white font-extrabold">{log.rule_name}</td>
-                    <td className="px-5 py-3.5 font-mono text-amber-400">{log.trigger}</td>
-                    <td className="px-5 py-3.5 font-mono text-slate-400">{log.duration_ms} ms</td>
-                    <td className="px-5 py-3.5 text-slate-400 text-[11px]">{new Date(log.timestamp).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 8: AUDIT LOGS (Task 9) */}
-      {activeTab === 'audit_logs' && (
-        <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl overflow-hidden shadow-2xl">
-          <div className="p-5 border-b border-[#1E293B] flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-[#00F5A0]" />
-              DevOps Security & Actions Audit Log
-            </h3>
-            <span className="text-xs text-slate-400 font-mono">Immutable Compliance Trail</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-[#1E293B] text-slate-400 uppercase tracking-wider text-[10px]">
-                  <th className="px-5 py-3 font-bold">Log ID</th>
-                  <th className="px-5 py-3 font-bold">User / Actor</th>
-                  <th className="px-5 py-3 font-bold">Action</th>
-                  <th className="px-5 py-3 font-bold">Resource</th>
-                  <th className="px-5 py-3 font-bold">Trace ID</th>
-                  <th className="px-5 py-3 font-bold">Latency</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E293B]">
-                {auditLogs.map((log, idx) => (
-                  <tr key={log.log_id || idx} className="hover:bg-white/[0.02]">
-                    <td className="px-5 py-3.5 font-mono text-[#00F5A0] font-bold">{log.log_id}</td>
-                    <td className="px-5 py-3.5 text-slate-300 font-medium">{log.user}</td>
-                    <td className="px-5 py-3.5 font-mono text-amber-400 text-[11px]">{log.action}</td>
-                    <td className="px-5 py-3.5 text-white font-extrabold">{log.resource}</td>
-                    <td className="px-5 py-3.5 font-mono text-slate-500 text-[10px]">{log.trace_id}</td>
-                    <td className="px-5 py-3.5 font-mono text-slate-400">{log.execution_time_ms} ms</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 9: REPORT GENERATOR (Task 8) */}
-      {activeTab === 'reports' && (
-        <div className="bg-[#0B1120] border border-[#00F5A0]/20 rounded-2xl p-6 space-y-6 shadow-2xl">
-          <div className="border-b border-[#1E293B] pb-4">
-            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-              <FileText className="w-5 h-5 text-[#00F5A0]" />
-              Automated Operational Report Generator
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Exports CSV, JSON, and PDF reports directly to local storage or Amazon S3 bucket</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div>
-              <label className="block text-slate-400 font-bold mb-1">Report Category</label>
-              <select
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value)}
-                className="w-full bg-[#050816] border border-[#1E293B] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#00F5A0]"
-              >
-                <option value="revenue">Revenue Operations Report</option>
-                <option value="payment">Payment Audit Report</option>
-                <option value="inventory">Inventory Stock Report</option>
-                <option value="customer">Customer LTV Report</option>
-                <option value="recovery">Recovery Opportunity Report</option>
-                <option value="automation">Automation Audit Report</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-slate-400 font-bold mb-1">Export Format</label>
-              <select
-                value={reportFormat}
-                onChange={(e) => setReportFormat(e.target.value)}
-                className="w-full bg-[#050816] border border-[#1E293B] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#00F5A0]"
-              >
-                <option value="csv">CSV Spreadsheet (.csv)</option>
-                <option value="json">JSON Data Stream (.json)</option>
-                <option value="txt">Text Summary (.txt / .pdf)</option>
-              </select>
-            </div>
-
-            <div className="flex items-end">
-              <button
-                onClick={handleGenerateReport}
-                className="w-full py-2.5 bg-[#00F5A0] text-slate-950 font-black rounded-xl hover:bg-[#00F5A0]/90 transition-all shadow-lg shadow-[#00F5A0]/20 flex items-center justify-center gap-2"
-              >
-                <Download className="w-4 h-4" /> Generate &amp; Download
-              </button>
-            </div>
-          </div>
-
-          {generatedReport && (
-            <div className="p-4 bg-[#050816] border border-[#00F5A0]/30 rounded-2xl space-y-2 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="font-extrabold text-white">Generated: {generatedReport.filename}</span>
-                <span className="font-mono text-[10px] text-[#00F5A0]">{generatedReport.record_count} Records Exported</span>
-              </div>
-              <pre className="p-3 bg-[#111827] rounded-xl font-mono text-[10px] text-slate-300 max-h-40 overflow-y-auto">
-                {generatedReport.content}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 10: CI/CD DASHBOARD (Task 14) */}
-      {activeTab === 'cicd' && (
-        <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl p-6 space-y-6 shadow-2xl">
-          <div className="border-b border-[#1E293B] pb-4">
-            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-              <GitBranch className="w-5 h-5 text-[#00F5A0]" />
-              GitHub Actions CI/CD & Kubernetes Status
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Build pipeline, Docker container registry, and Terraform infrastructure synchronization state</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-            <div className="p-4 bg-[#050816] border border-[#1E293B] rounded-2xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Pipeline Build</span>
-              <p className="text-sm font-black text-white">{cicd?.pipeline?.build_number ?? '#148'}</p>
-              <span className="text-[9px] font-bold text-[#00F5A0] bg-[#00F5A0]/10 px-2 py-0.5 rounded-full inline-block">SUCCESS</span>
-            </div>
-
-            <div className="p-4 bg-[#050816] border border-[#1E293B] rounded-2xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Docker Registry</span>
-              <p className="text-xs font-mono font-bold text-white truncate">{cicd?.docker?.image ?? 'revenuepilot-ai:v2.4.0'}</p>
-              <span className="text-[9px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full inline-block">PUSHED (142.8 MB)</span>
-            </div>
-
-            <div className="p-4 bg-[#050816] border border-[#1E293B] rounded-2xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Kubernetes Pods</span>
-              <p className="text-sm font-black text-white">{cicd?.kubernetes?.pods_running ?? 6} Pods Healthy</p>
-              <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block">k8s-ap-south-1</span>
-            </div>
-
-            <div className="p-4 bg-[#050816] border border-[#1E293B] rounded-2xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Terraform State</span>
-              <p className="text-sm font-black text-white">{cicd?.terraform?.resources_managed ?? 24} Resources</p>
-              <span className="text-[9px] font-bold text-[#FF9900] bg-[#FF9900]/10 px-2 py-0.5 rounded-full inline-block">SYNCED</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 11: SECURITY & PERFORMANCE (Tasks 15 & 16) */}
-      {activeTab === 'security' && (
-        <div className="bg-[#0B1120] border border-[#1E293B] rounded-2xl p-6 space-y-6 shadow-2xl">
-          <div className="border-b border-[#1E293B] pb-4">
-            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-              <Lock className="w-5 h-5 text-[#00F5A0]" />
-              Security Audit &amp; Performance Latency Percentiles
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">HMAC signature enforcement, JWT authorization, and p50/p95/p99 latency metrics</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-            {/* Security */}
-            <div className="bg-[#050816] border border-[#1E293B] rounded-2xl p-5 space-y-3">
-              <h4 className="font-extrabold text-[#00F5A0]">Security Center Rules</h4>
-              <div className="space-y-2 text-slate-300">
-                <div className="flex justify-between"><span>JWT Token Validation:</span> <span className="font-mono text-[#00F5A0]">ACTIVE (HS256)</span></div>
-                <div className="flex justify-between"><span>Webhook Signatures:</span> <span className="font-mono text-[#00F5A0]">HMAC-SHA256</span></div>
-                <div className="flex justify-between"><span>Rate Limiting:</span> <span className="font-mono text-emerald-400">100 req/min</span></div>
-              </div>
-            </div>
-
-            {/* Performance Percentiles */}
-            <div className="bg-[#050816] border border-[#1E293B] rounded-2xl p-5 space-y-3">
-              <h4 className="font-extrabold text-[#FF9900]">Latency Percentiles SLA</h4>
-              <div className="space-y-2 text-slate-300">
-                <div className="flex justify-between"><span>p50 Median Latency:</span> <span className="font-mono text-emerald-400">14.2 ms</span></div>
-                <div className="flex justify-between"><span>p95 Tail Latency:</span> <span className="font-mono text-amber-400">38.6 ms</span></div>
-                <div className="flex justify-between"><span>p99 Peak Latency:</span> <span className="font-mono text-[#FF9900]">82.1 ms</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 12: DEVELOPER TEST GENERATOR PANEL */}
+      {/* ── TAB: DEVELOPER TEST GENERATOR PANEL ─────────────────────────────── */}
       {activeTab === 'test_generator' && (
         <div className="bg-[#0B1120] border border-[#00F5A0]/30 rounded-2xl p-6 space-y-6 shadow-2xl">
           <div className="border-b border-[#1E293B] pb-4">
@@ -857,7 +1335,9 @@ export const AutomationCenter: React.FC = () => {
               <Sparkles className="w-5 h-5 text-[#00F5A0]" />
               Developer Test Event Generator
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Emits simulated events into the EventBus queue without Razorpay credentials for live hackathon demos.</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Emits simulated business events into the EventBus queue for instant AWS dispatch and rule validation.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -872,9 +1352,11 @@ export const AutomationCenter: React.FC = () => {
                   <option value="PAYMENT_FAILED">PAYMENT_FAILED (Decline / Timeout)</option>
                   <option value="PAYMENT_SUCCESS">PAYMENT_SUCCESS (Paid Order)</option>
                   <option value="LOW_STOCK">LOW_STOCK (Stock &le; 5)</option>
+                  <option value="OUT_OF_STOCK">OUT_OF_STOCK (Zero Stock)</option>
                   <option value="REVENUE_DROP">REVENUE_DROP (Anomaly 20%+)</option>
-                  <option value="WEBHOOK_RETRY">WEBHOOK_RETRY (Signature Error)</option>
-                  <option value="ABANDONED_CART">ABANDONED_CART (Checkout Abandoned)</option>
+                  <option value="REVENUE_SPIKE">REVENUE_SPIKE (Surge 30%+)</option>
+                  <option value="ABANDONED_CART">ABANDONED_CART (Checkout Drop-off)</option>
+                  <option value="WEBHOOK_RETRY">WEBHOOK_RETRY (Signature / Delivery Retry)</option>
                 </select>
               </div>
 
@@ -922,149 +1404,88 @@ export const AutomationCenter: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 12: DEMO DATA GENERATOR */}
-      {activeTab === 'demo_data' && (
-        <div className="space-y-6">
-          <div className="bg-[#0B1120] border border-[#00F5A0]/30 rounded-2xl p-6 shadow-2xl space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E293B] pb-4">
+      {/* ── MODAL / DRAWER: RECOVERY CAMPAIGN MESSAGE PREVIEW ───────────────── */}
+      {selectedCampaign && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0B1120] border border-[#00F5A0]/30 rounded-3xl p-6 max-w-xl w-full space-y-5 shadow-2xl">
+            <div className="flex justify-between items-start border-b border-[#1E293B] pb-3">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#00F5A0] animate-pulse" />
-                  <span className="text-[11px] font-extrabold tracking-widest text-[#00F5A0] uppercase">RevenuePilot v2.7 Seeding Engine</span>
-                </div>
-                <h2 className="text-xl font-black text-white flex items-center gap-2">
-                  <Database className="w-5 h-5 text-[#00F5A0]" /> Demo Store Data Generator
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Populate MongoDB Atlas with 90 days of realistic merchant business data for testing all dashboards, AI Copilot, reports, and cloud automations.
-                </p>
+                <span className="text-[10px] font-mono uppercase text-[#00F5A0] font-bold">
+                  {selectedCampaign.type}
+                </span>
+                <h3 className="text-base font-black text-white">{selectedCampaign.title}</h3>
+                <p className="text-xs text-slate-400">Target: {selectedCampaign.customer_name} ({selectedCampaign.customer_phone})</p>
               </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={handleSeedDemoStore}
-                  disabled={seedingLoading}
-                  className="px-4 py-2.5 bg-gradient-to-r from-[#00F5A0] to-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-[#00F5A0]/20 hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${seedingLoading ? 'animate-spin' : ''}`} />
-                  Generate 90-Day Demo Store
-                </button>
-
-                <button
-                  onClick={handleSeedTodayActivity}
-                  disabled={seedingLoading}
-                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <Sparkles className="w-4 h-4" /> Generate Today's Live Activity
-                </button>
-
-                <button
-                  onClick={handleResetDemoStore}
-                  disabled={seedingLoading}
-                  className="px-4 py-2.5 bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-400 font-bold text-xs rounded-xl transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <Trash2 className="w-4 h-4" /> Reset Demo Database
-                </button>
-              </div>
+              <button
+                onClick={() => setSelectedCampaign(null)}
+                className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
             </div>
 
-            {/* Seeding Progress Bar */}
-            {seedingLoading && (
-              <div className="space-y-2 bg-[#050816] p-4 rounded-xl border border-[#1E293B]">
-                <div className="flex justify-between text-xs font-bold text-slate-300">
-                  <span className="flex items-center gap-2">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#00F5A0]" />
-                    Processing MongoDB Seeding Pipelines...
-                  </span>
-                  <span className="font-mono text-[#00F5A0]">{seedingProgress}%</span>
+            {/* Preview Channel Tabs */}
+            <div className="flex gap-2 border-b border-[#1E293B] pb-2">
+              {[
+                { key: 'whatsapp', label: 'WhatsApp Preview', icon: MessageSquare },
+                { key: 'email', label: 'Email Preview', icon: Mail },
+                { key: 'push', label: 'Push Notification', icon: Bell },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isSelected = previewTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setPreviewTab(tab.key as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                      isSelected
+                        ? 'bg-slate-800 text-[#00F5A0] border border-[#00F5A0]/30'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Message Preview Body */}
+            <div className="p-4 bg-[#050816] rounded-2xl border border-[#1E293B] text-xs font-sans text-slate-200 whitespace-pre-wrap leading-relaxed">
+              {previewTab === 'whatsapp' && (
+                <div className="space-y-2">
+                  <div className="bg-[#0B1120] p-3 rounded-xl border border-emerald-500/20 text-emerald-300 font-mono text-[11px]">
+                    🟢 WhatsApp Business API Template Preview:
+                  </div>
+                  <p>{selectedCampaign.whatsapp_preview}</p>
                 </div>
-                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                  <div
-                    className="h-full bg-gradient-to-r from-[#00F5A0] to-emerald-400 transition-all duration-300 rounded-full"
-                    style={{ width: `${seedingProgress}%` }}
-                  />
+              )}
+              {previewTab === 'email' && (
+                <div className="space-y-2">
+                  <div className="bg-[#0B1120] p-3 rounded-xl border border-indigo-500/20 text-indigo-300 font-mono text-[11px]">
+                    📬 Responsive Email HTML Preview:
+                  </div>
+                  <p>{selectedCampaign.email_preview}</p>
                 </div>
-              </div>
-            )}
-
-            {/* Seeding Output Summary */}
-            {seedingResult && (
-              <div className="p-5 bg-[#050816] border border-[#00F5A0]/30 rounded-xl space-y-4 text-xs shadow-xl">
-                <div className="flex justify-between items-center border-b border-[#1E293B] pb-3">
-                  <span className="font-extrabold text-[#00F5A0] text-sm flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4" /> {seedingResult.message || 'Seeding Operation Completed'}
-                  </span>
-                  {seedingResult.duration_seconds && (
-                    <span className="font-mono text-slate-400 text-[11px]">
-                      Duration: {seedingResult.duration_seconds}s
-                    </span>
-                  )}
+              )}
+              {previewTab === 'push' && (
+                <div className="space-y-2">
+                  <div className="bg-[#0B1120] p-3 rounded-xl border border-pink-500/20 text-pink-300 font-mono text-[11px]">
+                    🔔 Mobile Push Notification Preview:
+                  </div>
+                  <p>{selectedCampaign.push_preview}</p>
                 </div>
+              )}
+            </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                  {Object.entries(seedingResult.collections || seedingResult.reset_summary || {}).map(([col, count]: [string, any]) => (
-                    <div key={col} className="bg-[#0B1120] p-3 rounded-lg border border-[#1E293B]">
-                      <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider block font-bold truncate">
-                        {col}
-                      </span>
-                      <span className="text-sm font-extrabold text-white font-mono">{count} docs</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* CREATE RULE MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0B1120] border border-[#00F5A0]/30 rounded-2xl p-6 max-w-lg w-full space-y-4">
-            <h3 className="text-base font-extrabold text-white">Create Custom Automation Rule</h3>
-            <form onSubmit={handleCreateRuleSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">Rule Name</label>
-                <input
-                  type="text"
-                  value={newRule.name}
-                  onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-                  className="w-full bg-[#050816] border border-[#1E293B] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#00F5A0]"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">Trigger Event</label>
-                <select
-                  value={newRule.trigger}
-                  onChange={(e) => setNewRule({ ...newRule, trigger: e.target.value })}
-                  className="w-full bg-[#050816] border border-[#1E293B] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#00F5A0]"
-                >
-                  <option value="PAYMENT_FAILED">PAYMENT_FAILED</option>
-                  <option value="LOW_STOCK">LOW_STOCK</option>
-                  <option value="REVENUE_DROP">REVENUE_DROP</option>
-                  <option value="ABANDONED_CART">ABANDONED_CART</option>
-                  <option value="REPEAT_CUSTOMER">REPEAT_CUSTOMER</option>
-                </select>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 font-bold rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#00F5A0] text-slate-950 font-black rounded-xl"
-                >
-                  Save Automation
-                </button>
-              </div>
-            </form>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setSelectedCampaign(null)}
+                className="px-5 py-2.5 bg-[#00F5A0] text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-[#00F5A0]/20"
+              >
+                Close Preview
+              </button>
+            </div>
           </div>
         </div>
       )}

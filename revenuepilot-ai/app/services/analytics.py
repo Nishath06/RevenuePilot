@@ -334,13 +334,13 @@ async def col_count(collection_name: str, query: dict) -> int:
 async def successful_payments() -> int:
     """Count all-time captured payments."""
     col = get_collection("payments")
-    return await col.count_documents({"status": "captured"})
+    return await col.count_documents({"status": {"$in": ["captured", "paid", "Paid"]}})
 
 
 async def failed_payments() -> int:
     """Count all-time failed payments."""
     col = get_collection("payments")
-    return await col.count_documents({"status": "failed"})
+    return await col.count_documents({"status": {"$in": ["failed", "Failed"]}})
 
 
 async def failed_payments_today() -> int:
@@ -349,9 +349,9 @@ async def failed_payments_today() -> int:
     start = _start_of_day(now)
     col = get_collection("payments")
     # Try tz-aware first, fall back to naive
-    count = await col.count_documents({"status": "failed", "created_at": {"$gte": start}})
+    count = await col.count_documents({"status": {"$in": ["failed", "Failed"]}, "created_at": {"$gte": start}})
     if count == 0:
-        count = await col.count_documents({"status": "failed", "created_at": {"$gte": start.replace(tzinfo=None)}})
+        count = await col.count_documents({"status": {"$in": ["failed", "Failed"]}, "created_at": {"$gte": start.replace(tzinfo=None)}})
     return count
 
 
@@ -360,9 +360,9 @@ async def cancelled_payments_today() -> int:
     now = _utc_now()
     start = _start_of_day(now)
     col = get_collection("payments")
-    count = await col.count_documents({"status": "cancelled", "created_at": {"$gte": start}})
+    count = await col.count_documents({"status": {"$in": ["cancelled", "Cancelled"]}, "created_at": {"$gte": start}})
     if count == 0:
-        count = await col.count_documents({"status": "cancelled", "created_at": {"$gte": start.replace(tzinfo=None)}})
+        count = await col.count_documents({"status": {"$in": ["cancelled", "Cancelled"]}, "created_at": {"$gte": start.replace(tzinfo=None)}})
     return count
 
 

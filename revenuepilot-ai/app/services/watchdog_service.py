@@ -230,11 +230,10 @@ class WatchdogService:
         Monitors daily revenue performance for anomalies and emits events.
         """
         db = get_mongodb()
-        from app.services.analytics import analytics_service
+        from app.services import analytics
 
-        today_metrics = await analytics_service.get_today_metrics()
-        growth = today_metrics.get("revenue", {}).get("growth_percentage", 0.0)
-        today_rev = today_metrics.get("revenue", {}).get("today", 0.0)
+        growth = await analytics.growth_percentage()
+        today_rev = await analytics.revenue_today()
 
         if growth <= -20.0:
             await cloud_event_bus.publish(
@@ -270,11 +269,11 @@ class WatchdogService:
         Components: Revenue Growth, Payment Success Rate, Inventory Health, Recovery Success, Customer Retention, Webhook Health, Cloud Health.
         """
         db = get_mongodb()
-        from app.services.analytics import analytics_service
+        from app.services import analytics
 
-        rev_metrics = await analytics_service.get_revenue_metrics()
-        pay_metrics = await analytics_service.get_payment_metrics()
-        inv_metrics = await analytics_service.get_inventory_metrics()
+        rev_metrics = await analytics.get_revenue_metrics()
+        pay_metrics = await analytics.get_payment_metrics()
+        inv_metrics = await analytics.get_inventory_metrics()
 
         # Component 1: Revenue Growth (max 20)
         rev_score = min(20, max(5, int(15 + (rev_metrics.growth_percentage / 5))))
@@ -292,7 +291,7 @@ class WatchdogService:
         rec_score = min(15, 10 + rec_count)
 
         # Component 5: Customer Retention (max 15)
-        cust_summary = await analytics_service.customer_acquisition_summary()
+        cust_summary = await analytics.customer_acquisition_summary()
         retention = cust_summary.get("retention_rate", 80.0)
         cust_score = min(15, max(5, int((retention / 100) * 15)))
 

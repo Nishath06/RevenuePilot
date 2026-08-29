@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Shield, Key, ExternalLink, Activity, CheckCircle, RefreshCw, Save } from 'lucide-react';
-import { aiAPI, merchantAPI } from '../services/api';
+import { Shield, Key, ExternalLink, Activity, CheckCircle, RefreshCw, Save, Database, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
+import { aiAPI, merchantAPI, automationAPI } from '../services/api';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -11,6 +11,61 @@ export const SettingsPage: React.FC = () => {
   const [aiStatus, setAiStatus] = useState<string>('Checking...');
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Feature 11 — Demo Mode Toggle State
+  const [demoMode, setDemoMode] = useState<boolean>(true);
+  const [demoLoading, setDemoLoading] = useState<boolean>(false);
+  const [demoMessage, setDemoMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    automationAPI.getDemoStatus().then((res) => {
+      if (res.data?.demo_mode !== undefined) {
+        setDemoMode(res.data.demo_mode);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleToggleDemoMode = async () => {
+    setDemoLoading(true);
+    setDemoMessage(null);
+    try {
+      const nextState = !demoMode;
+      const res = await automationAPI.toggleDemoMode(nextState);
+      setDemoMode(nextState);
+      setDemoMessage(res.data?.message || `Demo Mode is now ${nextState ? 'ENABLED' : 'DISABLED'}.`);
+      setTimeout(() => setDemoMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to toggle demo mode', err);
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
+  const handleQuickSeed = async () => {
+    setDemoLoading(true);
+    try {
+      await automationAPI.generateDemoData();
+      setDemoMessage('Generated 30-day realistic merchant dataset successfully!');
+      setTimeout(() => setDemoMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to seed demo data', err);
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
+  const handleQuickReset = async () => {
+    setDemoLoading(true);
+    try {
+      await automationAPI.resetDemoStore();
+      setDemoMessage('Demo database reset successfully.');
+      setTimeout(() => setDemoMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to reset demo data', err);
+    } finally {
+      setDemoLoading(false);
+    }
+  };
 
   const runDiagnostics = async () => {
     setTesting(true);
@@ -44,8 +99,76 @@ export const SettingsPage: React.FC = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-extrabold text-white">Merchant Portal Settings</h1>
-        <p className="text-xs text-slate-400 mt-1">Manage Razorpay test credentials, API endpoints, and microservice status</p>
+        <p className="text-xs text-slate-400 mt-1">Manage Demo Mode, Razorpay test credentials, API endpoints, and microservice status</p>
       </div>
+
+      {/* FEATURE 11 — DEMO MODE TOGGLE CARD */}
+      <div className="bg-[#111827] rounded-3xl border border-[#00F5A0]/30 p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#1E293B] pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#00F5A0]/10 text-[#00F5A0] border border-[#00F5A0]/30 flex items-center justify-center">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Demo Mode Engine (v2.7)</h3>
+                <span
+                  className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                    demoMode
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}
+                >
+                  {demoMode ? 'DEMO MODE ACTIVE' : 'LIVE PRODUCTION'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Serve 30-day realistic merchant dataset while AWS EventBridge, Lambda, SNS, S3, and CloudWatch remain fully functional.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleToggleDemoMode}
+            disabled={demoLoading}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              demoMode
+                ? 'bg-[#00F5A0] text-slate-950 shadow-lg shadow-[#00F5A0]/20'
+                : 'bg-slate-800 text-slate-300 border border-slate-700'
+            }`}
+          >
+            {demoMode ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+            {demoMode ? 'Demo Mode ON' : 'Demo Mode OFF'}
+          </button>
+        </div>
+
+        {demoMessage && (
+          <div className="p-3 bg-[#050816] rounded-xl border border-[#00F5A0]/30 text-xs text-[#00F5A0] font-mono flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" /> {demoMessage}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-slate-400">Quick Data Operations:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={handleQuickSeed}
+              disabled={demoLoading}
+              className="px-3 py-1.5 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/30 text-indigo-300 text-xs font-bold rounded-xl transition-all"
+            >
+              Seed 30-Day Dataset
+            </button>
+            <button
+              onClick={handleQuickReset}
+              disabled={demoLoading}
+              className="px-3 py-1.5 bg-rose-600/20 border border-rose-500/30 hover:bg-rose-600/30 text-rose-400 text-xs font-bold rounded-xl transition-all"
+            >
+              Reset Demo Collections
+            </button>
+          </div>
+        </div>
+      </div>
+
 
       {/* Account Info */}
       <div className="bg-[#111827] rounded-2xl border border-[#1E293B] p-6 space-y-4 shadow-xl">

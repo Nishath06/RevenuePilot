@@ -112,6 +112,20 @@ export const automationAPI = {
   simulateScenario: (data: any) => aiClient.post('/automation/simulate', data),
   awsAuditLogs: () => aiClient.get('/automation/aws-audit-logs'),
   testAwsService: (service: string) => aiClient.post('/automation/aws-health/test', { service }),
+  // RevenuePilot v2.7 Demo Data Generator & QA APIs
+  generateDemoData: (params?: { merchant_id?: string; days?: number; orders?: number; customers?: number; products?: number }) =>
+    aiClient.post('/automation/demo/generate', params || { days: 30, orders: 2500, customers: 650, products: 120 }),
+  generateDemoEvents: (params?: { event_type?: string; count?: number }) =>
+    aiClient.post('/automation/demo/events', params || { count: 10 }),
+  runDemoWatchdogs: () => aiClient.post('/automation/demo/run-watchdogs'),
+  runDemoSchedulers: () => aiClient.post('/automation/demo/run-schedulers'),
+  runDemoLambdas: () => aiClient.post('/automation/demo/run-lambdas'),
+  runDemoReports: () => aiClient.post('/automation/demo/run-reports'),
+  getDemoStatus: () => aiClient.get('/automation/demo/status'),
+  toggleDemoMode: (enabled: boolean) => aiClient.post('/automation/demo/toggle', { enabled }),
+  getDemoSummary: () => aiClient.get('/automation/demo/summary'),
+  getDemoFeeds: () => aiClient.get('/automation/demo/feeds'),
+  getDemoAwsAudit: (limit: number = 50) => aiClient.get('/automation/demo/aws-audit', { params: { limit } }),
   seedDemoStore: () => aiClient.post('/automation/demo/seed'),
   seedTodayActivity: () => aiClient.post('/automation/demo/today'),
   resetDemoStore: () => aiClient.post('/automation/demo/reset'),
@@ -124,3 +138,4 @@ export const merchantAPI = {
   payments: () => storeClient.get('/merchant/payments'),
   events: () => storeClient.get('/merchant/events'),
 };
+

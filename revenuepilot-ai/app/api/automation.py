@@ -616,6 +616,25 @@ async def run_autoops_simulator(payload: Dict[str, Any]):
 
 # ─── REVENUEPILOT v2.7 DEMO DATA GENERATOR ENDPOINTS ─────────────────────────
 
+from app.services.demo_data_service import demo_data_service
+
+@router.post("/demo/generate")
+async def api_generate_demo_dataset(payload: Optional[Dict[str, Any]] = None):
+    """
+    POST /automation/demo/generate
+    Generates 30 days of realistic ecommerce data across 2,500 orders, 650 customers, 120 products.
+    """
+    params = payload or {}
+    merchant_id = params.get("merchant_id", "merch_default")
+    days = int(params.get("days", 30))
+    orders_cnt = int(params.get("orders", 2500))
+    customers_cnt = int(params.get("customers", 650))
+    products_cnt = int(params.get("products", 120))
+    return await demo_data_service.generate_full_demo_dataset(
+        merchant_id=merchant_id, days=days, orders_count=orders_cnt,
+        customers_count=customers_cnt, products_count=products_cnt
+    )
+
 @router.post("/demo/seed")
 async def api_seed_demo_store():
     """
@@ -624,7 +643,6 @@ async def api_seed_demo_store():
     """
     from scripts.seed_production_data import seed_production_data
     return await seed_production_data()
-
 
 @router.post("/demo/today")
 async def api_seed_today_activity():
@@ -635,6 +653,81 @@ async def api_seed_today_activity():
     from scripts.generate_today_activity import generate_today_activity
     return await generate_today_activity()
 
+@router.post("/demo/events")
+async def api_emit_demo_events(payload: Optional[Dict[str, Any]] = None):
+    """
+    POST /automation/demo/events
+    Emits simulated events to EventBridge/Local Bus and triggers Lambda executions.
+    """
+    params = payload or {}
+    event_type = params.get("event_type", "PAYMENT_FAILED")
+    event_data = params.get("payload")
+    return await demo_data_service.emit_demo_event(event_type=event_type, payload=event_data)
+
+@router.post("/demo/run-watchdogs")
+async def api_run_demo_watchdogs():
+    """
+    POST /automation/demo/run-watchdogs
+    Runs all 7 watchdogs and returns status board.
+    """
+    return await demo_data_service.run_all_watchdogs()
+
+@router.post("/demo/run-schedulers")
+async def api_run_demo_schedulers():
+    """
+    POST /automation/demo/run-schedulers
+    Triggers all automation schedulers manually.
+    """
+    return await demo_data_service.run_all_schedulers()
+
+@router.post("/demo/run-lambdas")
+async def api_run_demo_lambdas():
+    """
+    POST /automation/demo/run-lambdas
+    Executes simulated Lambda functions and records execution logs.
+    """
+    await demo_data_service.generate_simulated_lambdas_and_metrics(days=30)
+    return {"status": "success", "message": "Invoked all 5 AWS Lambda functions (Inventory, Recovery, Reports, Incident, CloudWatch)"}
+
+@router.post("/demo/run-reports")
+async def api_run_demo_reports():
+    """
+    POST /automation/demo/run-reports
+    Generates operational reports (CSV, JSON, PDF) and uploads to S3/local storage.
+    """
+    reports = await demo_data_service.generate_demo_reports_files()
+    return {"status": "success", "generated_count": len(reports), "reports": reports}
+
+@router.get("/demo/status")
+async def api_get_demo_status():
+    """
+    GET /automation/demo/status
+    Returns status of Demo Mode and cloud connections.
+    """
+    summary = await demo_data_service.get_demo_summary()
+    return {
+        "demo_mode": True,
+        "aws_mode": "cloud" if not aws_client.is_local_mode else "local_fallback",
+        "region": aws_client.region,
+        "database_connected": True,
+        "summary": summary
+    }
+
+@router.get("/demo/summary")
+async def api_get_demo_summary():
+    """
+    GET /automation/demo/summary
+    Returns collection counts for all merchant demo data.
+    """
+    return await demo_data_service.get_demo_summary()
+
+@router.get("/demo/aws-audit")
+async def api_get_aws_audit():
+    """
+    GET /automation/demo/aws-audit
+    Returns audit trail of AWS operations.
+    """
+    return await demo_data_service.get_aws_audit()
 
 @router.post("/demo/reset")
 async def api_reset_demo_store():
@@ -645,4 +738,5 @@ async def api_reset_demo_store():
     from scripts.reset_demo_data import reset_demo_database
     summary = await reset_demo_database()
     return {"status": "success", "reset_summary": summary}
+
 
