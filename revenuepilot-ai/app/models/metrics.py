@@ -58,19 +58,19 @@ class PaymentMetrics(BaseModel):
 
 
 class ProductStock(BaseModel):
-    product_id: str
-    title: str
-    stock: int
-    price: float
-    category: str
+    product_id: str = "unknown"
+    title: str = "Unknown Product"
+    stock: int = 0
+    price: float = 0.0
+    category: str = ""
 
 
 class SalesRank(BaseModel):
-    product_id: str
-    title: str
-    units_sold: int
-    revenue: float
-    category: str
+    product_id: str = "unknown"
+    title: str = "Unknown Product"
+    units_sold: int = 0
+    revenue: float = 0.0
+    category: str = ""
 
 
 class InventoryMetrics(BaseModel):

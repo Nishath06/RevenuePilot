@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import logger
 from app.db.mongodb import init_db, close_db
-from app.services.seed import seed_products_if_empty
+from app.services.seed import seed_products_if_empty, seed_users_if_empty
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.routers import auth, products, cart, checkout, webhooks, merchant
@@ -15,6 +15,7 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
         await seed_products_if_empty()
+        await seed_users_if_empty()
     except Exception as e:
         logger.warning(f"Database initialization warning: {e}. (Ensure MongoDB is running locally or MONGODB_URL is configured).")
     yield
@@ -30,18 +31,32 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Configuration
+# Custom Middlewares
+app.add_middleware(RateLimitMiddleware, max_requests=200, window_seconds=60)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS Configuration (Added last so it acts as the outermost middleware for requests/responses)
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:3002",
+    "http://127.0.0.1:3003",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Custom Middlewares
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware, max_requests=200, window_seconds=60)
 
 # Include Routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)

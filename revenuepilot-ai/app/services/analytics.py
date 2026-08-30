@@ -532,11 +532,11 @@ async def low_stock_products() -> list[ProductStock]:
     docs = await cursor.to_list(20)
     return [
         ProductStock(
-            product_id=d.get("product_id", str(d["_id"])),
-            title=d.get("title", "Unknown"),
-            stock=d.get("stock", 0),
-            price=d.get("price", 0.0),
-            category=d.get("category", ""),
+            product_id=str(d.get("product_id") or d.get("_id") or "unknown"),
+            title=str(d.get("title") or d.get("name") or "Unknown Product"),
+            stock=int(d.get("stock") or 0),
+            price=float(d.get("price") or 0.0),
+            category=str(d.get("category") or ""),
         )
         for d in docs
     ]
@@ -548,11 +548,11 @@ async def out_of_stock_products() -> list[ProductStock]:
     docs = await cursor.to_list(20)
     return [
         ProductStock(
-            product_id=d.get("product_id", str(d["_id"])),
-            title=d.get("title", "Unknown"),
+            product_id=str(d.get("product_id") or d.get("_id") or "unknown"),
+            title=str(d.get("title") or d.get("name") or "Unknown Product"),
             stock=0,
-            price=d.get("price", 0.0),
-            category=d.get("category", ""),
+            price=float(d.get("price") or 0.0),
+            category=str(d.get("category") or ""),
         )
         for d in docs
     ]
@@ -567,7 +567,7 @@ async def best_selling_products(limit: int = 10) -> list[SalesRank]:
         {
             "$group": {
                 "_id": "$items.product_id",
-                "title": {"$first": "$items.title"},
+                "title": {"$first": {"$ifNull": ["$items.title", {"$ifNull": ["$items.name", "Unknown Product"]}]}},
                 "units_sold": {"$sum": "$items.quantity"},
                 "revenue": {"$sum": {"$multiply": ["$items.price", "$items.quantity"]}},
             }
@@ -578,10 +578,10 @@ async def best_selling_products(limit: int = 10) -> list[SalesRank]:
     result = await col.aggregate(pipeline).to_list(limit)
     return [
         SalesRank(
-            product_id=r["_id"],
-            title=r["title"],
-            units_sold=r["units_sold"],
-            revenue=round(r["revenue"], 2),
+            product_id=str(r.get("_id") or "unknown"),
+            title=str(r.get("title") or r.get("name") or "Unknown Product"),
+            units_sold=int(r.get("units_sold") or 0),
+            revenue=round(float(r.get("revenue") or 0.0), 2),
             category="",
         )
         for r in result
@@ -597,7 +597,7 @@ async def slow_selling_products(limit: int = 10) -> list[SalesRank]:
         {
             "$group": {
                 "_id": "$items.product_id",
-                "title": {"$first": "$items.title"},
+                "title": {"$first": {"$ifNull": ["$items.title", {"$ifNull": ["$items.name", "Unknown Product"]}]}},
                 "units_sold": {"$sum": "$items.quantity"},
                 "revenue": {"$sum": {"$multiply": ["$items.price", "$items.quantity"]}},
             }
@@ -608,10 +608,10 @@ async def slow_selling_products(limit: int = 10) -> list[SalesRank]:
     result = await col.aggregate(pipeline).to_list(limit)
     return [
         SalesRank(
-            product_id=r["_id"],
-            title=r["title"],
-            units_sold=r["units_sold"],
-            revenue=round(r["revenue"], 2),
+            product_id=str(r.get("_id") or "unknown"),
+            title=str(r.get("title") or r.get("name") or "Unknown Product"),
+            units_sold=int(r.get("units_sold") or 0),
+            revenue=round(float(r.get("revenue") or 0.0), 2),
             category="",
         )
         for r in result

@@ -90,13 +90,14 @@ class GeminiProvider(BaseLLMProvider):
     """
 
     def __init__(self) -> None:
-        api_key = (settings.GEMINI_API_KEY or "").strip()
+        import os
+        api_key = (os.getenv("GEMINI_API_KEY") or settings.GEMINI_API_KEY or "").strip()
         if not api_key:
             logger.warning("GEMINI_API_KEY is not set or empty. Gemini Provider initialization requires key.")
             raise ValueError("Configuration Error: GEMINI_API_KEY is missing in environment.")
 
-        base_url = (settings.GEMINI_BASE_URL or "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/")
-        model = settings.GEMINI_MODEL or "gemini-3.6-flash"
+        base_url = (os.getenv("GEMINI_BASE_URL") or settings.GEMINI_BASE_URL or "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/")
+        model = os.getenv("GEMINI_MODEL") or settings.GEMINI_MODEL or "gemini-3.6-flash"
 
         super().__init__(name="gemini", model=model)
         self.api_key = api_key

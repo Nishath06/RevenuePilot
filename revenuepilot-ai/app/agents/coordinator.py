@@ -988,8 +988,14 @@ class CoordinatorAgent:
 coordinator: CoordinatorAgent | None = None
 
 
-def get_coordinator(provider: BaseLLMProvider | None = None) -> CoordinatorAgent:
+def get_coordinator(provider: BaseLLMProvider | None = None, force_reload: bool = False) -> CoordinatorAgent:
     global coordinator
-    if coordinator is None or provider is not None:
-        coordinator = CoordinatorAgent(provider=provider)
+    if coordinator is None or provider is not None or force_reload or not coordinator.ai_ready:
+        try:
+            active_provider = provider or LLMFactory.get_provider(force_reload=force_reload or (coordinator is not None and not coordinator.ai_ready))
+            coordinator = CoordinatorAgent(provider=active_provider)
+        except Exception as exc:
+            logger.warning("Failed to initialize active coordinator with LLM provider", error=str(exc))
+            if coordinator is None:
+                coordinator = CoordinatorAgent(provider=None)
     return coordinator

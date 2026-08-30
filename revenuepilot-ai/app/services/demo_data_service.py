@@ -168,7 +168,7 @@ class DemoDataService:
             "customer_id": "cust_nishath_001",
             "user_id": "usr_nishath",
             "name": "Nishath Merchant",
-            "email": "merchant@revenuepilot.com",
+            "email": "jpnishath@gmail.com",
             "phone": "+91 98765 43210",
             "city": "Bengaluru",
             "state": "Karnataka",
@@ -686,6 +686,67 @@ class DemoDataService:
             "count": len(logs),
             "aws_mode": "cloud" if not aws_client.is_local_mode else "local_fallback",
             "audit_logs": logs
+        }
+
+
+    async def get_demo_feeds(self) -> Dict[str, Any]:
+        """
+        QA Test API — GET /automation/demo/feeds
+        Aggregates CloudWatch metric graphs, Watchdogs status board, Step Functions event timeline, and Lambda invocation stream.
+        """
+        db = get_mongodb()
+
+        lambdas = await db.lambda_executions.find({}, {"_id": 0}).sort("created_at", -1).limit(15).to_list(15)
+
+        events = await db.events.find({}, {"_id": 0}).sort("created_at", -1).limit(15).to_list(15)
+        timeline_feed = []
+        for evt in events:
+            timeline_feed.append({
+                "trace_id": evt.get("trace_id", f"trace_{uuid.uuid4().hex[:6]}"),
+                "event_type": evt.get("event_type", "EVENT_PROCESSED"),
+                "rule_evaluated": evt.get("rule_evaluated", "AutoOps Business Rule v1"),
+                "lambda_invoked": evt.get("lambda_invoked", "InventoryLambda"),
+                "sns_published": bool(evt.get("sns_published")),
+                "cloudwatch_logged": bool(evt.get("cloudwatch_logged", True)),
+                "execution_result": evt.get("execution_result", "SUCCESS"),
+                "duration_ms": random.randint(10, 45),
+            })
+
+        watchdogs_board = [
+            {"id": "wd_1", "name": "Revenue Watchdog", "status": "Healthy", "description": "Monitors order spikes, revenue drops & anomalies", "latency_ms": 14.2, "items_scanned": 2500},
+            {"id": "wd_2", "name": "Inventory Watchdog", "status": "Healthy", "description": "Scans stock thresholds, dead stock & out of stock", "latency_ms": 18.5, "items_scanned": 120},
+            {"id": "wd_3", "name": "Payment Watchdog", "status": "Healthy", "description": "Monitors gateway failure rate & checkout errors", "latency_ms": 12.0, "items_scanned": 2500},
+            {"id": "wd_4", "name": "Webhook Watchdog", "status": "Healthy", "description": "Tracks Razorpay webhook latency & retries", "latency_ms": 9.8, "items_scanned": 2500},
+            {"id": "wd_5", "name": "Customer Retention Watchdog", "status": "Healthy", "description": "Analyzes repeat rate, inactive users & VIPs", "latency_ms": 15.1, "items_scanned": 650},
+            {"id": "wd_6", "name": "Recovery Watchdog", "status": "Healthy", "description": "Monitors WhatsApp & email recovery campaigns", "latency_ms": 11.4, "items_scanned": 100},
+            {"id": "wd_7", "name": "Incident Watchdog", "status": "Healthy", "description": "Auto-creates tickets for payment failures", "latency_ms": 8.5, "items_scanned": 45},
+        ]
+
+        now = datetime.now(timezone.utc)
+        cloudwatch_feed = []
+        for i in range(10):
+            t_label = (now - timedelta(minutes=(9 - i))).strftime("%H:%M")
+            cloudwatch_feed.append({
+                "time_label": t_label,
+                "OrdersProcessed": random.randint(15, 60),
+                "RevenueGenerated": random.randint(12000, 85000),
+                "FailedPayments": random.randint(1, 5),
+                "RecoveredPayments": random.randint(2, 12),
+                "InventoryAlerts": random.randint(0, 3),
+                "LambdaInvocations": random.randint(10, 35),
+                "WebhookLatency": round(random.uniform(10.0, 35.0), 1),
+                "DatabaseLatency": round(random.uniform(2.0, 8.0), 1),
+                "PaymentSuccessRate": round(random.uniform(92.0, 99.0), 1),
+                "SchedulerExecutions": random.randint(1, 6),
+                "SNSNotificationsSent": random.randint(5, 20),
+                "S3ReportsUploaded": random.randint(1, 4),
+            })
+
+        return {
+            "lambda_feed": lambdas,
+            "timeline_feed": timeline_feed,
+            "watchdogs_board": watchdogs_board,
+            "cloudwatch_feed": cloudwatch_feed,
         }
 
 

@@ -4,11 +4,11 @@ from beanie import Document, Indexed
 from pydantic import BaseModel, Field
 
 class OrderItem(BaseModel):
-    product_id: str
-    title: str
-    price: float
+    product_id: str = "prod_unknown"
+    title: Optional[str] = "Product Item"
+    price: float = 0.0
     image: Optional[str] = ""
-    quantity: int
+    quantity: int = 1
 
 class PaymentEvent(BaseModel):
     status: str

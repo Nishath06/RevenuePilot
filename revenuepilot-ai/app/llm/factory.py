@@ -27,10 +27,11 @@ class LLMFactory:
         Returns the active LLM provider based on LLM_PROVIDER or AI_PROVIDER setting.
         Supports gemini, grok, and openai.
         """
+        import os
         if cls._cached_provider is not None and not force_reload:
             return cls._cached_provider
 
-        provider_name = (settings.LLM_PROVIDER or settings.AI_PROVIDER or "gemini").lower().strip()
+        provider_name = (os.getenv("LLM_PROVIDER") or os.getenv("AI_PROVIDER") or settings.LLM_PROVIDER or settings.AI_PROVIDER or "gemini").lower().strip()
 
         logger.info("Initializing LLM Provider from factory", configured_provider=provider_name)
 

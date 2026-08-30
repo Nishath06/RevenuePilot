@@ -30,7 +30,7 @@ SERVICES = [
         "type": "fastapi",
         "cwd": os.path.join(ROOT_DIR, "revenuepilot-store", "backend"),
         "venv": os.path.join(ROOT_DIR, "revenuepilot-store", "backend", "venv"),
-        "args": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--host", "0.0.0.0", "--reload"],
+        "args": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--host", "127.0.0.1", "--reload"],
     },
     {
         "name": "RevenuePilot AI Service",
@@ -38,7 +38,7 @@ SERVICES = [
         "type": "fastapi",
         "cwd": os.path.join(ROOT_DIR, "revenuepilot-ai"),
         "venv": os.path.join(ROOT_DIR, "revenuepilot-ai", "venv"),
-        "args": ["-m", "uvicorn", "app.main:app", "--port", "8001", "--host", "0.0.0.0", "--reload"],
+        "args": ["-m", "uvicorn", "app.main:app", "--port", "8001", "--host", "127.0.0.1", "--reload"],
     },
     {
         "name": "RevenuePilot Store Frontend",
@@ -109,9 +109,12 @@ def start_service(svc):
     print(f"   Command:   {' '.join(cmd)}")
 
     try:
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
         proc = subprocess.Popen(
             cmd,
             cwd=cwd,
+            env=env,
             stdout=None,  # Inherit terminal output or let logs print live
             stderr=None,
         )

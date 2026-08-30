@@ -1,5 +1,5 @@
 """
-RevenuePilot AI — FastAPI Application Entry Point
+RevenuePilot AI — FastAPI Application Entry Point (Hot-Reloaded)
 """
 from __future__ import annotations
 

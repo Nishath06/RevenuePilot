@@ -729,6 +729,14 @@ async def api_get_aws_audit():
     """
     return await demo_data_service.get_aws_audit()
 
+@router.get("/demo/feeds")
+async def api_get_demo_feeds():
+    """
+    GET /automation/demo/feeds
+    Returns live feed of CloudWatch graphs, watchdogs status, event timeline & lambdas.
+    """
+    return await demo_data_service.get_demo_feeds()
+
 @router.post("/demo/reset")
 async def api_reset_demo_store():
     """

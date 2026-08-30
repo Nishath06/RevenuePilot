@@ -355,7 +355,8 @@ class AutomationEngine:
             topic = params.get("topic", "payments")
             subject = params.get("subject", f"AutoOps Alert: {event.event_type}")
             msg = f"AutoOps Alert [{event.event_type}] EventID={event.event_id}: {subject}"
-            sns_res = send_notification(topic_type_or_arn=topic, message=msg, subject=subject)
+            target_email = event.payload.get("customer_email") or event.payload.get("email") or "jpnishath@gmail.com"
+            sns_res = send_notification(topic_type_or_arn=topic, message=msg, subject=subject, recipient_email=target_email)
             put_metric(metric_name="SNSEventsPublished", value=1.0, unit="Count", dimensions={"Topic": topic})
             return sns_res
 

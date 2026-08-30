@@ -55,9 +55,18 @@ class AwsSettings:
         )
 
 
+from pathlib import Path
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = BASE_DIR / ".env"
+if ENV_FILE.exists():
+    load_dotenv(ENV_FILE, override=True)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -94,7 +103,6 @@ class Settings(BaseSettings):
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: list[str] = [
-        "*",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",
@@ -105,6 +113,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
         "http://127.0.0.1:3002",
+        "http://127.0.0.1:3003",
+        "http://127.0.0.1:5173",
     ]
 
     # ── Cache ─────────────────────────────────────────────────────────────────
@@ -125,6 +135,10 @@ class Settings(BaseSettings):
     AWS_CLOUDWATCH_LOG_GROUP: str = "/revenuepilot/autoops"
     AWS_CLOUDWATCH_LOG_STREAM: str = "autoops-stream"
     AWS_CLOUDWATCH_NAMESPACE: str = "RevenuePilot/AutoOps"
+
+    # ── Notification / Email Target Settings ─────────────────────────────────
+    NOTIFICATION_EMAIL: str = "jpnishath@gmail.com"
+    TEST_EMAIL_RECIPIENT: str = "jpnishath@gmail.com"
 
     # ── Store Backend ─────────────────────────────────────────────────────────
     STORE_BACKEND_URL: str = "http://localhost:8000"

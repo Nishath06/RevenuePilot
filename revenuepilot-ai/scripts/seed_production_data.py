@@ -199,25 +199,32 @@ async def seed_production_data() -> dict:
             c.pop("_id", None)
             customers_docs.append(c)
 
+    try:
+        import bcrypt
+        default_pw_hash = bcrypt.hashpw(b"password123", bcrypt.gensalt()).decode("utf-8")
+    except Exception:
+        import hashlib
+        default_pw_hash = hashlib.sha256(b"password123").hexdigest()
+
     users_docs = [
-        {
-            "name": "Nishath",
-            "email": "nishath@revenuepilot.com",
-            "phone": "+919876543210",
-            "role": "merchant",
-            "password_hash": "$2b$12$riAPMAaETmcjA/a46.2OC.Afk7YhCMcRndnAO2aJ6ZasS2LkpkXdG", # password123
-            "created_at": start_90d.isoformat(),
-        },
         {
             "name": "RevenuePilot Merchant",
             "email": "merchant@revenuepilot.com",
             "phone": "+919876543210",
             "role": "merchant",
-            "password_hash": "$2b$12$riAPMAaETmcjA/a46.2OC.Afk7YhCMcRndnAO2aJ6ZasS2LkpkXdG", # password123
+            "password_hash": default_pw_hash, # password123
+            "created_at": start_90d.isoformat(),
+        },
+        {
+            "name": "Nishath (Admin)",
+            "email": "jpnishath@gmail.com",
+            "phone": "+919876543210",
+            "role": "merchant",
+            "password_hash": default_pw_hash, # password123
             "created_at": start_90d.isoformat(),
         }
     ]
-    seen_user_emails = {"nishath@revenuepilot.com", "merchant@revenuepilot.com"}
+    seen_user_emails = {"jpnishath@gmail.com", "merchant@revenuepilot.com"}
     if existing_nishath_users:
         for u in existing_nishath_users:
             u.pop("_id", None)
@@ -265,7 +272,7 @@ async def seed_production_data() -> dict:
                 "name": f"{fn} {ln}",
                 "email": email_str,
                 "phone": c_doc["phone"],
-                "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQOEg6Lruj3vjPGga31lW",
+                "password_hash": default_pw_hash,
                 "created_at": created_dt.isoformat(),
             }
             users_docs.append(user_doc)
