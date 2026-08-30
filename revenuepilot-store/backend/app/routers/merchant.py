@@ -11,7 +11,7 @@ router = APIRouter(prefix="/merchant", tags=["Merchant & AI Integration APIs"])
 
 @router.get("/orders")
 async def get_merchant_orders(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
-    orders = await Order.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
+    orders = await Order.find(Order.merchant_id == _current_user.merchant_id).sort("-created_at").skip(skip).limit(limit).to_list()
     result = []
     for o in orders:
         user_doc = None
@@ -44,7 +44,7 @@ async def get_merchant_orders(limit: int = 100, skip: int = 0, _current_user: Us
 
 @router.get("/payments")
 async def get_merchant_payments(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
-    payments = await Payment.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
+    payments = await Payment.find(Payment.merchant_id == _current_user.merchant_id).sort("-created_at").skip(skip).limit(limit).to_list()
     result = []
     for p in payments:
         user_name = "Customer"
@@ -84,7 +84,7 @@ async def get_merchant_payments(limit: int = 100, skip: int = 0, _current_user: 
 
 @router.get("/customers")
 async def get_merchant_customers(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
-    users = await User.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
+    users = await User.find(User.merchant_id == _current_user.merchant_id).sort("-created_at").skip(skip).limit(limit).to_list()
     return [
         {
             "user_id": str(u.id),
@@ -98,7 +98,7 @@ async def get_merchant_customers(limit: int = 100, skip: int = 0, _current_user:
 @router.get("/revenue-summary", response_model=RevenueSummaryOut)
 @router.get("/summary", response_model=RevenueSummaryOut)
 async def get_merchant_revenue_summary(_current_user: User = Depends(require_merchant)):
-    all_orders = await Order.find_all().to_list()
+    all_orders = await Order.find(Order.merchant_id == _current_user.merchant_id).to_list()
     total_orders = len(all_orders)
 
     paid_orders_list     = [o for o in all_orders if o.payment_status == "Paid"]

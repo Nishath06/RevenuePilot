@@ -67,6 +67,7 @@ async def create_order(
     db_order = Order(
         order_id=order_id,
         user_id=str(current_user.id),
+        merchant_id=current_user.merchant_id,
         items=items_to_order,
         total_amount=total_amount,
         currency="INR",
@@ -110,6 +111,7 @@ async def verify_payment(
         logger.info(
             "payment_immutability_blocked_verify",
             order_id=order.order_id,
+            merchant_id=order.merchant_id,
             current_status=order.payment_status,
             requested_status="Paid"
         )
@@ -163,6 +165,7 @@ async def verify_payment(
     payment = Payment(
         payment_id=f"pay_{uuid.uuid4().hex[:12]}",
         order_id=order.order_id,
+        merchant_id=order.merchant_id,
         razorpay_payment_id=req.razorpay_payment_id,
         amount=order.total_amount,
         method="card",
@@ -214,6 +217,7 @@ async def update_payment_status(
         logger.warning(
             "payment_immutability_blocked_update",
             order_id=order.order_id,
+            merchant_id=order.merchant_id,
             razorpay_order_id=order.razorpay_order_id,
             current_status=order.payment_status,
             attempted_status=req.payment_status,
@@ -287,6 +291,7 @@ async def update_payment_status(
     payment = Payment(
         payment_id=f"pay_{uuid.uuid4().hex[:12]}",
         order_id=order.order_id,
+        merchant_id=order.merchant_id,
         razorpay_payment_id=None,
         amount=order.total_amount,
         method="razorpay",

@@ -6,6 +6,7 @@ from pydantic import Field
 class Payment(Document):
     payment_id: Indexed(str, unique=True)
     order_id: Indexed(str)
+    merchant_id: Indexed(str) = "merch_default"
     razorpay_payment_id: Optional[str] = None  # None for cancellations
     amount: float
     method: str = "unknown"
@@ -16,4 +17,3 @@ class Payment(Document):
 
     class Settings:
         name = "payments"
-
