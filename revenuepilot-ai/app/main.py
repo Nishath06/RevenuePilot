@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         port=settings.PORT,
     )
 
+    settings.validate_runtime_configuration()
     # Connect to MongoDB
     await connect_to_mongodb()
 

@@ -1,15 +1,16 @@
 from typing import List
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.models.order import Order
 from app.models.payment import Payment
 from app.models.user import User
 from app.models.webhook import WebhookEvent
 from app.schemas.merchant import RevenueSummaryOut
+from app.api.deps import require_merchant
 
 router = APIRouter(prefix="/merchant", tags=["Merchant & AI Integration APIs"])
 
 @router.get("/orders")
-async def get_merchant_orders(limit: int = 100, skip: int = 0):
+async def get_merchant_orders(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
     orders = await Order.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
     result = []
     for o in orders:
@@ -42,7 +43,7 @@ async def get_merchant_orders(limit: int = 100, skip: int = 0):
     return result
 
 @router.get("/payments")
-async def get_merchant_payments(limit: int = 100, skip: int = 0):
+async def get_merchant_payments(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
     payments = await Payment.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
     result = []
     for p in payments:
@@ -82,7 +83,7 @@ async def get_merchant_payments(limit: int = 100, skip: int = 0):
     return result
 
 @router.get("/customers")
-async def get_merchant_customers(limit: int = 100, skip: int = 0):
+async def get_merchant_customers(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
     users = await User.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
     return [
         {
@@ -96,7 +97,7 @@ async def get_merchant_customers(limit: int = 100, skip: int = 0):
 
 @router.get("/revenue-summary", response_model=RevenueSummaryOut)
 @router.get("/summary", response_model=RevenueSummaryOut)
-async def get_merchant_revenue_summary():
+async def get_merchant_revenue_summary(_current_user: User = Depends(require_merchant)):
     all_orders = await Order.find_all().to_list()
     total_orders = len(all_orders)
 
@@ -128,7 +129,7 @@ async def get_merchant_revenue_summary():
     )
 
 @router.get("/events")
-async def get_merchant_events(limit: int = 100, skip: int = 0):
+async def get_merchant_events(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
     events = await WebhookEvent.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
     return [
         {

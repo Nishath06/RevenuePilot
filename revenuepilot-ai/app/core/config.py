@@ -96,9 +96,9 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # ── Auth ──────────────────────────────────────────────────────────────────
-    API_SECRET_KEY: str = "revenuepilot_ai_secret_key_2026"
-    API_KEY: str = "revenuepilot_ai_secret_key_2026"
-    JWT_SECRET: str = "supersecretjwtkey_revenuepilot_2026_hackathon"
+    API_SECRET_KEY: str = ""
+    API_KEY: str = ""
+    JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
@@ -142,6 +142,10 @@ class Settings(BaseSettings):
 
     # ── Store Backend ─────────────────────────────────────────────────────────
     STORE_BACKEND_URL: str = "http://localhost:8000"
+
+    def validate_runtime_configuration(self) -> None:
+        if self.ENVIRONMENT.lower() in {"production", "staging"} and not self.JWT_SECRET:
+            raise RuntimeError("JWT_SECRET is required in production")
 
     @property
     def aws_settings(self) -> AwsSettings:

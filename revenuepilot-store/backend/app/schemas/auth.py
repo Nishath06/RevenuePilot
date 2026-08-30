@@ -1,21 +1,24 @@
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from typing import Literal
+from pydantic import BaseModel, EmailStr, Field
 
 class UserRegister(BaseModel):
-    name: str
+    name: str = Field(min_length=2, max_length=120)
     email: EmailStr
-    phone: str
-    password: str
+    phone: str = Field(min_length=7, max_length=24)
+    password: str = Field(min_length=12, max_length=72)
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=72)
 
 class UserOut(BaseModel):
     id: str
     name: str
     email: str
     phone: str
+    role: Literal["customer", "merchant", "admin"]
+    merchant_id: str
     created_at: datetime
 
 class TokenResponse(BaseModel):

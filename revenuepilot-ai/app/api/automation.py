@@ -5,7 +5,7 @@ Production APIs for Business Automations, EventBridge Scheduler, Watchdogs, Reco
 from typing import Any, Dict, List, Optional
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.db.mongodb import get_mongodb
 from app.models.automation_rule import AutomationRule, AutomationRuleCreate
@@ -20,10 +20,11 @@ from app.services.devops_service import devops_service
 from app.services.aws_client import aws_client
 from app.services.aws_eventbridge import aws_manager
 from app.core.logging import get_logger
+from app.core.security import verify_api_key
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/automation", tags=["AutoOps Automation Engine"])
+router = APIRouter(prefix="/automation", tags=["AutoOps Automation Engine"], dependencies=[Depends(verify_api_key)])
 
 
 # ─── PART 1: DAILY AUTONOMOUS SCHEDULER (CRON ENGINE) ───────────────────────
@@ -746,5 +747,4 @@ async def api_reset_demo_store():
     from scripts.reset_demo_data import reset_demo_database
     summary = await reset_demo_database()
     return {"status": "success", "reset_summary": summary}
-
 

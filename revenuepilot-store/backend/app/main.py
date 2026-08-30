@@ -13,6 +13,7 @@ from app.routers import auth, products, cart, checkout, webhooks, merchant
 async def lifespan(app: FastAPI):
     logger.info("Initializing RevenuePilot Store Backend Application...")
     try:
+        settings.validate_runtime_configuration()
         await init_db()
         await seed_products_if_empty()
         await seed_users_if_empty()
