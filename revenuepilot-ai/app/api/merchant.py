@@ -4,11 +4,14 @@ Prompt chips + recovery data + live merchant metrics for the Merchant Dashboard.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.security import verify_api_key
 from app.models.response import PromptsResponse, RecoveryResponse
 from app.services import merchant_service
+from app.db.mongodb import get_mongodb
 
 router = APIRouter(prefix="/merchant", tags=["Merchant"])
 
@@ -95,3 +98,82 @@ async def get_incidents(_: str = Depends(verify_api_key)) -> dict:
 async def get_webhooks(_: str = Depends(verify_api_key)) -> dict:
     return await merchant_service.get_webhooks_metrics_detailed()
 
+
+# ── INCIDENT MANAGEMENT ──────────────────────────────────────────────────────
+
+@router.post("/incidents/{incident_id}/resolve", summary="Resolve an incident and persist to MongoDB")
+async def resolve_incident(
+    incident_id: str,
+    payload: Optional[Dict[str, Any]] = None,
+    _: str = Depends(verify_api_key)
+) -> dict:
+    """
+    Marks an incident as resolved in MongoDB, storing resolution note and timestamp.
+    """
+    db = get_mongodb()
+    resolution_note = (payload or {}).get("note", "Resolved by merchant")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    result = await db.incidents.update_one(
+        {"$or": [{"id": incident_id}, {"incident_id": incident_id}]},
+        {
+            "$set": {
+                "status": "resolved",
+                "resolved_at": now_iso,
+                "resolution_note": resolution_note,
+            }
+        }
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    return {
+        "success": True,
+        "incident_id": incident_id,
+        "status": "resolved",
+        "resolved_at": now_iso,
+        "resolution_note": resolution_note,
+    }
+
+
+# ── MERCHANT SETTINGS (PERSISTENT) ────────────────────────────────────────────
+
+@router.get("/settings", summary="Load merchant settings from MongoDB")
+async def get_merchant_settings(
+    merchant_id: str = "merch_default",
+    _: str = Depends(verify_api_key)
+) -> dict:
+    db = get_mongodb()
+    settings_doc = await db.merchant_settings.find_one({"merchant_id": merchant_id}, {"_id": 0})
+    if not settings_doc:
+        # Return sensible defaults
+        return {
+            "merchant_id": merchant_id,
+            "business_name": "RevenuePilot Demo Store",
+            "contact_email": "jpnishath@gmail.com",
+            "notification_email": "jpnishath@gmail.com",
+            "razorpay_key_id": "",
+            "webhook_secret": "",
+            "demo_mode": True,
+            "email_alerts": True,
+            "whatsapp_alerts": False,
+            "ai_provider": "gemini",
+        }
+    return settings_doc
+
+
+@router.post("/settings", summary="Persist merchant settings to MongoDB")
+async def save_merchant_settings(
+    payload: Dict[str, Any],
+    _: str = Depends(verify_api_key)
+) -> dict:
+    db = get_mongodb()
+    merchant_id = payload.get("merchant_id", "merch_default")
+    # Never store raw secrets in DB — strip them
+    safe_payload = {k: v for k, v in payload.items() if k not in {"razorpay_key_secret"}}
+    safe_payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.merchant_settings.update_one(
+        {"merchant_id": merchant_id},
+        {"$set": safe_payload},
+        upsert=True
+    )
+    return {"success": True, "merchant_id": merchant_id, "message": "Settings saved successfully"}

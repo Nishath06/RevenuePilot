@@ -103,9 +103,9 @@ async def seed_production_data() -> dict:
     existing_nishath_users = await db.users.find({"$or": [{"name": {"$regex": "Nishath", "$options": "i"}}, {"email": {"$regex": "nishath", "$options": "i"}}]}).to_list(length=50)
     existing_nishath_customers = await db.customers.find({"$or": [{"name": {"$regex": "Nishath", "$options": "i"}}, {"email": {"$regex": "nishath", "$options": "i"}}]}).to_list(length=50)
 
-    # Clear Existing Demo Data
+    # Clear Existing Demo Data (preserve users collection so merchant logins remain active)
     collections_to_clear = [
-        "orders", "payments", "customers", "users", "products", "inventory_events",
+        "orders", "payments", "customers", "products", "inventory_events",
         "recovery_campaigns", "ai_conversations", "conversations", "reports",
         "generated_reports", "events", "lambda_executions", "cloudwatch_metrics",
         "execution_history", "incidents", "watchdog_snapshots", "watchdogs",
@@ -113,6 +113,25 @@ async def seed_production_data() -> dict:
     ]
     for c in collections_to_clear:
         await db[c].delete_many({})
+
+    # Guarantee default merchant users exist with valid password hash
+    import bcrypt
+    pwd_hash = bcrypt.hashpw("password123".encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
+    for email, name in [("merchant@revenuepilot.com", "RevenuePilot Merchant"), ("jpnishath@gmail.com", "Nishath Admin")]:
+        await db.users.update_one(
+            {"email": email},
+            {
+                "$set": {
+                    "name": name,
+                    "phone": "+919876543210",
+                    "password_hash": pwd_hash,
+                    "role": "merchant",
+                    "merchant_id": "merch_default",
+                    "created_at": start_90d.isoformat()
+                }
+            },
+            upsert=True
+        )
 
     counts = {}
 

@@ -79,7 +79,7 @@ export const automationAPI = {
   history: () => aiClient.get('/automation/history'),
   incidents: () => aiClient.get('/automation/incidents'),
   metrics: () => aiClient.get('/automation/metrics'),
-  testEvent: (data: any) => aiClient.post('/automation/test-event', data),
+  testEvent: (data: any) => aiClient.post('/automation/demo/events', data),
   awsHealth: () => aiClient.get('/automation/aws-health'),
   triggerInventoryWatchdog: () => aiClient.post('/automation/watchdog/inventory'),
   triggerRevenueWatchdog: () => aiClient.post('/automation/watchdog/revenue'),
@@ -129,6 +129,7 @@ export const automationAPI = {
   seedDemoStore: () => aiClient.post('/automation/demo/seed'),
   seedTodayActivity: () => aiClient.post('/automation/demo/today'),
   resetDemoStore: () => aiClient.post('/automation/demo/reset'),
+  sendTestEmail: (data?: { to_email?: string; subject?: string; body?: string }) => aiClient.post('/automation/email/send-test', data || {}),
 };
 
 // ─── Store Merchant APIs ──────────────────────────────────────────────────────
@@ -139,3 +140,14 @@ export const merchantAPI = {
   events: () => storeClient.get('/merchant/events'),
 };
 
+// ─── Merchant Intelligence APIs (AI Service) ──────────────────────────────────
+export const merchantIntelAPI = {
+  resolveIncident: (id: string, note?: string) =>
+    aiClient.post(`/merchant/incidents/${id}/resolve`, { note: note || 'Resolved by merchant' }),
+  loadSettings: (merchantId = 'merch_default') =>
+    aiClient.get('/merchant/settings', { params: { merchant_id: merchantId } }),
+  saveSettings: (data: Record<string, any>) =>
+    aiClient.post('/merchant/settings', data),
+  markRecoverySent: (campaignId: string) =>
+    aiClient.post('/automation/recovery/mark-sent', { campaign_id: campaignId }),
+};

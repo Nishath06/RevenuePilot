@@ -37,36 +37,63 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _make_date_filter(field_name: str, start_dt: datetime, end_dt: datetime | None = None) -> dict:
+    """Build a MongoDB $or filter matching BSON Date (tz-aware + naive), ISO strings, and YYYY-MM-DD date strings."""
+    start_aware = start_dt if start_dt.tzinfo else start_dt.replace(tzinfo=timezone.utc)
+    start_naive = start_aware.replace(tzinfo=None)
+    start_iso = start_aware.isoformat()
+    start_date_str = start_aware.strftime("%Y-%m-%d")
+
+    if end_dt:
+        end_aware = end_dt if end_dt.tzinfo else end_dt.replace(tzinfo=timezone.utc)
+        end_naive = end_aware.replace(tzinfo=None)
+        end_iso = end_aware.isoformat()
+        end_date_str = end_aware.strftime("%Y-%m-%d")
+
+        return {
+            "$or": [
+                {field_name: {"$gte": start_aware, "$lt": end_aware}},
+                {field_name: {"$gte": start_naive, "$lt": end_naive}},
+                {field_name: {"$gte": start_iso, "$lt": end_iso}},
+                {field_name: {"$gte": start_date_str, "$lt": end_date_str}},
+            ]
+        }
+    else:
+        return {
+            "$or": [
+                {field_name: {"$gte": start_aware}},
+                {field_name: {"$gte": start_naive}},
+                {field_name: {"$gte": start_iso}},
+                {field_name: {"$gte": start_date_str}},
+            ]
+        }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Revenue Metrics
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def revenue_today() -> float:
-    """Sum of paid order totals created today (UTC). Handles both tz-aware and naive stored datetimes."""
+    """Sum of paid order totals created today (UTC). Supports BSON Date, naive Date, ISO string, and YYYY-MM-DD."""
     import time
     t0 = time.monotonic()
     now = _utc_now()
-    start_aware = _start_of_day(now)
-    start_naive = start_aware.replace(tzinfo=None)
+    start_dt = _start_of_day(now)
     col = get_collection("orders")
 
-    # Try tz-aware first
+    filter_query = _make_date_filter("created_at", start_dt)
+    filter_query["payment_status"] = "Paid"
+
     pipeline = [
-        {"$match": {"payment_status": "Paid", "created_at": {"$gte": start_aware}}},
+        {"$match": filter_query},
         {"$group": {"_id": None, "total": {"$sum": "$total_amount"}, "count": {"$sum": 1}}},
     ]
     result = await col.aggregate(pipeline).to_list(1)
 
-    # If nothing found, try naive datetime (MongoDB stored without tz)
-    if not result:
-        pipeline[0]["$match"]["created_at"] = {"$gte": start_naive}
-        result = await col.aggregate(pipeline).to_list(1)
-
-    revenue = result[0]["total"] if result else 0.0
+    revenue = round(result[0]["total"], 2) if result else 0.0
     count = result[0]["count"] if result else 0
     elapsed = round((time.monotonic() - t0) * 1000, 1)
-    logger.info("revenue_today", revenue=revenue, paid_orders=count,
-                start=str(start_aware), elapsed_ms=elapsed)
+    logger.info("revenue_today", revenue=revenue, paid_orders=count, elapsed_ms=elapsed)
     return revenue
 
 
@@ -76,17 +103,16 @@ async def revenue_yesterday() -> float:
     today_start = _start_of_day(now)
     yesterday_start = today_start - timedelta(days=1)
     col = get_collection("orders")
+
+    filter_query = _make_date_filter("created_at", yesterday_start, today_start)
+    filter_query["payment_status"] = "Paid"
+
     pipeline = [
-        {
-            "$match": {
-                "payment_status": "Paid",
-                "created_at": {"$gte": yesterday_start, "$lt": today_start},
-            }
-        },
+        {"$match": filter_query},
         {"$group": {"_id": None, "total": {"$sum": "$total_amount"}}},
     ]
     result = await col.aggregate(pipeline).to_list(1)
-    return result[0]["total"] if result else 0.0
+    return round(result[0]["total"], 2) if result else 0.0
 
 
 async def revenue_this_week() -> float:
@@ -94,12 +120,16 @@ async def revenue_this_week() -> float:
     now = _utc_now()
     week_start = _start_of_day(now) - timedelta(days=now.weekday())
     col = get_collection("orders")
+
+    filter_query = _make_date_filter("created_at", week_start)
+    filter_query["payment_status"] = "Paid"
+
     pipeline = [
-        {"$match": {"payment_status": "Paid", "created_at": {"$gte": week_start}}},
+        {"$match": filter_query},
         {"$group": {"_id": None, "total": {"$sum": "$total_amount"}}},
     ]
     result = await col.aggregate(pipeline).to_list(1)
-    return result[0]["total"] if result else 0.0
+    return round(result[0]["total"], 2) if result else 0.0
 
 
 async def revenue_this_month() -> float:
@@ -107,12 +137,16 @@ async def revenue_this_month() -> float:
     now = _utc_now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     col = get_collection("orders")
+
+    filter_query = _make_date_filter("created_at", month_start)
+    filter_query["payment_status"] = "Paid"
+
     pipeline = [
-        {"$match": {"payment_status": "Paid", "created_at": {"$gte": month_start}}},
+        {"$match": filter_query},
         {"$group": {"_id": None, "total": {"$sum": "$total_amount"}}},
     ]
     result = await col.aggregate(pipeline).to_list(1)
-    return result[0]["total"] if result else 0.0
+    return round(result[0]["total"], 2) if result else 0.0
 
 
 async def growth_percentage() -> float:
@@ -162,14 +196,13 @@ async def paid_orders() -> int:
 
 
 async def paid_orders_today() -> int:
-    """Count paid orders created today — handles both tz-aware and naive datetimes."""
+    """Count paid orders created today."""
     now = _utc_now()
-    start_aware = _start_of_day(now)
-    start_naive = start_aware.replace(tzinfo=None)
+    start_dt = _start_of_day(now)
     col = get_collection("orders")
-    count = await col.count_documents({"payment_status": "Paid", "created_at": {"$gte": start_aware}})
-    if count == 0:
-        count = await col.count_documents({"payment_status": "Paid", "created_at": {"$gte": start_naive}})
+    query = _make_date_filter("created_at", start_dt)
+    query["payment_status"] = "Paid"
+    count = await col.count_documents(query)
     logger.info("paid_orders_today", count=count)
     return count
 
@@ -192,15 +225,13 @@ async def cancelled_orders() -> int:
 
 
 async def _today_order_count(status: str) -> int:
-    """Count orders of a given payment_status created today. Handles tz-aware/naive."""
+    """Count orders of a given payment_status created today."""
     now = _utc_now()
-    start_aware = _start_of_day(now)
-    start_naive = start_aware.replace(tzinfo=None)
+    start_dt = _start_of_day(now)
     col = get_collection("orders")
-    count = await col.count_documents({"payment_status": status, "created_at": {"$gte": start_aware}})
-    if count == 0:
-        count = await col.count_documents({"payment_status": status, "created_at": {"$gte": start_naive}})
-    return count
+    query = _make_date_filter("created_at", start_dt)
+    query["payment_status"] = status
+    return await col.count_documents(query)
 
 
 async def failed_orders_today() -> int:
@@ -213,26 +244,18 @@ async def cancelled_orders_today() -> int:
 async def orders_today() -> int:
     """Count all orders created today regardless of status."""
     now = _utc_now()
-    start_aware = _start_of_day(now)
-    start_naive = start_aware.replace(tzinfo=None)
+    start_dt = _start_of_day(now)
     col = get_collection("orders")
-    count = await col.count_documents({"created_at": {"$gte": start_aware}})
-    if count == 0:
-        count = await col.count_documents({"created_at": {"$gte": start_naive}})
-    return count
+    query = _make_date_filter("created_at", start_dt)
+    return await col.count_documents(query)
 
 
-async def _period_order_count(status: str | None, start_dt: datetime) -> int:
-    start_naive = start_dt.replace(tzinfo=None)
+async def _period_order_count(status: str | None, start_dt: datetime, end_dt: datetime | None = None) -> int:
     col = get_collection("orders")
-    query = {"created_at": {"$gte": start_dt}}
+    query = _make_date_filter("created_at", start_dt, end_dt)
     if status:
         query["payment_status"] = status
-    count = await col.count_documents(query)
-    if count == 0:
-        query["created_at"] = {"$gte": start_naive}
-        count = await col.count_documents(query)
-    return count
+    return await col.count_documents(query)
 
 async def orders_this_week() -> int:
     now = _utc_now()

@@ -11,19 +11,29 @@ router = APIRouter(prefix="/merchant", tags=["Merchant & AI Integration APIs"])
 
 @router.get("/orders")
 async def get_merchant_orders(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
-    orders = await Order.find(Order.merchant_id == _current_user.merchant_id).sort("-created_at").skip(skip).limit(limit).to_list()
+    orders = await Order.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
+    if not orders:
+        return []
+
+    # Batch fetch users to eliminate N+1 queries
+    from bson import ObjectId
+    user_ids = {o.user_id for o in orders if o.user_id}
+    obj_ids = [ObjectId(uid) for uid in user_ids if ObjectId.is_valid(uid)]
+    email_ids = [uid for uid in user_ids if not ObjectId.is_valid(uid)]
+
+    users_by_id = {}
+    if obj_ids:
+        docs = await User.find({"_id": {"$in": obj_ids}}).to_list()
+        for u in docs:
+            users_by_id[str(u.id)] = u
+    if email_ids:
+        docs = await User.find({"email": {"$in": email_ids}}).to_list()
+        for u in docs:
+            users_by_id[u.email] = u
+
     result = []
     for o in orders:
-        user_doc = None
-        try:
-            from bson import ObjectId
-            if ObjectId.is_valid(o.user_id):
-                user_doc = await User.get(ObjectId(o.user_id))
-            if not user_doc:
-                user_doc = await User.find_one(User.email == o.user_id)
-        except Exception:
-            pass
-
+        user_doc = users_by_id.get(o.user_id)
         customer_name = user_doc.name if user_doc and user_doc.name else f"Customer {o.user_id[-6:] if o.user_id else ''}"
         customer_email = user_doc.email if user_doc and user_doc.email else ""
 
@@ -44,28 +54,47 @@ async def get_merchant_orders(limit: int = 100, skip: int = 0, _current_user: Us
 
 @router.get("/payments")
 async def get_merchant_payments(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
-    payments = await Payment.find(Payment.merchant_id == _current_user.merchant_id).sort("-created_at").skip(skip).limit(limit).to_list()
+    payments = await Payment.find_all().sort("-created_at").skip(skip).limit(limit).to_list()
+    if not payments:
+        return []
+
+    # Batch fetch orders and users
+    from bson import ObjectId
+    order_ids = {p.order_id for p in payments if p.order_id}
+    matched_orders = await Order.find({"$or": [{"order_id": {"$in": list(order_ids)}}, {"razorpay_order_id": {"$in": list(order_ids)}}]}).to_list()
+    
+    orders_map = {}
+    user_ids = set()
+    for ord_doc in matched_orders:
+        orders_map[ord_doc.order_id] = ord_doc
+        if ord_doc.razorpay_order_id:
+            orders_map[ord_doc.razorpay_order_id] = ord_doc
+        if ord_doc.user_id:
+            user_ids.add(ord_doc.user_id)
+
+    obj_ids = [ObjectId(uid) for uid in user_ids if ObjectId.is_valid(uid)]
+    email_ids = [uid for uid in user_ids if not ObjectId.is_valid(uid)]
+
+    users_by_id = {}
+    if obj_ids:
+        docs = await User.find({"_id": {"$in": obj_ids}}).to_list()
+        for u in docs:
+            users_by_id[str(u.id)] = u
+    if email_ids:
+        docs = await User.find({"email": {"$in": email_ids}}).to_list()
+        for u in docs:
+            users_by_id[u.email] = u
+
     result = []
     for p in payments:
         user_name = "Customer"
         user_email = ""
-        if p.order_id:
-            order = await Order.find_one(Order.order_id == p.order_id)
-            if not order:
-                order = await Order.find_one(Order.razorpay_order_id == p.order_id)
-            if order and order.user_id:
-                try:
-                    from bson import ObjectId
-                    user_doc = None
-                    if ObjectId.is_valid(order.user_id):
-                        user_doc = await User.get(ObjectId(order.user_id))
-                    if not user_doc:
-                        user_doc = await User.find_one(User.email == order.user_id)
-                    if user_doc:
-                        user_name = user_doc.name or "Customer"
-                        user_email = user_doc.email or ""
-                except Exception:
-                    pass
+        order = orders_map.get(p.order_id)
+        if order and order.user_id:
+            user_doc = users_by_id.get(order.user_id)
+            if user_doc:
+                user_name = user_doc.name or "Customer"
+                user_email = user_doc.email or ""
 
         result.append({
             "payment_id": p.payment_id,
@@ -84,7 +113,8 @@ async def get_merchant_payments(limit: int = 100, skip: int = 0, _current_user: 
 
 @router.get("/customers")
 async def get_merchant_customers(limit: int = 100, skip: int = 0, _current_user: User = Depends(require_merchant)):
-    users = await User.find(User.merchant_id == _current_user.merchant_id).sort("-created_at").skip(skip).limit(limit).to_list()
+    # Only return actual customers, never merchant/admin accounts
+    users = await User.find(User.role == "customer").sort("-created_at").skip(skip).limit(limit).to_list()
     return [
         {
             "user_id": str(u.id),
@@ -98,7 +128,7 @@ async def get_merchant_customers(limit: int = 100, skip: int = 0, _current_user:
 @router.get("/revenue-summary", response_model=RevenueSummaryOut)
 @router.get("/summary", response_model=RevenueSummaryOut)
 async def get_merchant_revenue_summary(_current_user: User = Depends(require_merchant)):
-    all_orders = await Order.find(Order.merchant_id == _current_user.merchant_id).to_list()
+    all_orders = await Order.find_all().to_list()
     total_orders = len(all_orders)
 
     paid_orders_list     = [o for o in all_orders if o.payment_status == "Paid"]

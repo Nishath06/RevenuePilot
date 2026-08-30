@@ -3,8 +3,6 @@ export interface User {
   name: string;
   email: string;
   phone: string;
-  role: 'customer' | 'merchant' | 'admin';
-  merchant_id: string;
   created_at: string;
 }
 

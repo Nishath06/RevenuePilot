@@ -2,26 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Shield, Key, ExternalLink, Activity, CheckCircle, RefreshCw, Save, Database, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
 import { aiAPI, merchantAPI, automationAPI } from '../services/api';
+import { merchantIntelAPI } from '../services/api';
+import toast from 'react-hot-toast';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuthStore();
-  const [razorpayKey, setRazorpayKey] = useState('rzp_test_revenuepilot');
-  const [webhookSecret, setWebhookSecret] = useState('whsec_revenuepilot_2026');
+  const [razorpayKey, setRazorpayKey] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
   const [storeStatus, setStoreStatus] = useState<string>('Checking...');
   const [aiStatus, setAiStatus] = useState<string>('Checking...');
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Feature 11 — Demo Mode Toggle State
   const [demoMode, setDemoMode] = useState<boolean>(true);
   const [demoLoading, setDemoLoading] = useState<boolean>(false);
   const [demoMessage, setDemoMessage] = useState<string | null>(null);
 
+  // Load persisted settings on mount
   useEffect(() => {
+    merchantIntelAPI.loadSettings().then((res) => {
+      const s = res.data;
+      if (s?.razorpay_key_id) setRazorpayKey(s.razorpay_key_id);
+      if (s?.webhook_secret) setWebhookSecret(s.webhook_secret);
+    }).catch(() => {});
+
     automationAPI.getDemoStatus().then((res) => {
-      if (res.data?.demo_mode !== undefined) {
-        setDemoMode(res.data.demo_mode);
-      }
+      if (res.data?.demo_mode !== undefined) setDemoMode(res.data.demo_mode);
     }).catch(() => {});
   }, []);
 
@@ -46,9 +53,10 @@ export const SettingsPage: React.FC = () => {
     try {
       await automationAPI.generateDemoData();
       setDemoMessage('Generated 30-day realistic merchant dataset successfully!');
+      toast.success('Demo data seeded!');
       setTimeout(() => setDemoMessage(null), 3000);
     } catch (err) {
-      console.error('Failed to seed demo data', err);
+      toast.error('Failed to seed demo data');
     } finally {
       setDemoLoading(false);
     }
@@ -59,9 +67,10 @@ export const SettingsPage: React.FC = () => {
     try {
       await automationAPI.resetDemoStore();
       setDemoMessage('Demo database reset successfully.');
+      toast.success('Demo data reset!');
       setTimeout(() => setDemoMessage(null), 3000);
     } catch (err) {
-      console.error('Failed to reset demo data', err);
+      toast.error('Failed to reset demo data');
     } finally {
       setDemoLoading(false);
     }
@@ -71,28 +80,41 @@ export const SettingsPage: React.FC = () => {
     setTesting(true);
     setStoreStatus('Testing connection...');
     setAiStatus('Testing connection...');
-
     try {
       await merchantAPI.summary();
       setStoreStatus('Connected (HTTP 200 OK)');
     } catch {
       setStoreStatus('Error connecting to Store microservice');
     }
-
     try {
       await aiAPI.health();
       setAiStatus('Connected (HTTP 200 OK)');
     } catch {
       setAiStatus('Error connecting to AI microservice');
     }
-
     setTesting(false);
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await merchantIntelAPI.saveSettings({
+        merchant_id: 'merch_default',
+        razorpay_key_id: razorpayKey,
+        webhook_secret: webhookSecret,
+        contact_email: user?.email || 'jpnishath@gmail.com',
+      });
+      setSaved(true);
+      toast.success('Settings saved to database!');
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
   };
+
+
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -231,10 +253,11 @@ export const SettingsPage: React.FC = () => {
 
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/20"
+            disabled={saving}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/20"
           >
-            {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            {saved ? 'Saved Successfully!' : 'Save Credentials'}
+            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Credentials'}
           </button>
         </div>
       </div>

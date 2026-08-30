@@ -18,7 +18,8 @@ async def lifespan(app: FastAPI):
         await seed_products_if_empty()
         await seed_users_if_empty()
     except Exception as e:
-        logger.warning(f"Database initialization warning: {e}. (Ensure MongoDB is running locally or MONGODB_URL is configured).")
+        logger.error(f"Database initialization failed: {e}. (Ensure MongoDB is running at {settings.MONGODB_URL}).")
+        raise e
     yield
     logger.info("Shutting down RevenuePilot Store Backend Application...")
     await close_db()

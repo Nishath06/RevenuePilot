@@ -3,12 +3,15 @@ import { motion } from 'framer-motion';
 import { KPICard } from '../components/cards/KPICard';
 import { ShoppingBag, Zap, Copy, Check, Send, AlertTriangle, XCircle, RotateCcw, MessageSquare, Mail } from 'lucide-react';
 import { aiAPI } from '../services/api';
+import { merchantIntelAPI } from '../services/api';
+import toast from 'react-hot-toast';
 
 export const RecoveryPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [sent, setSent] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'all' | 'failed' | 'cancelled' | 'abandoned'>('all');
 
   useEffect(() => {
@@ -201,20 +204,37 @@ export const RecoveryPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Actions Footer */}
                 <div className="p-4 bg-[#161F30] border-t border-[#1E293B] flex gap-2">
                   <button
-                    onClick={() => setSent((s) => new Set([...s, cardId]))}
-                    disabled={hasSent}
+                    onClick={async () => {
+                      if (hasSent || sending.has(cardId)) return;
+                      setSending((s) => new Set([...s, cardId]));
+                      try {
+                        await merchantIntelAPI.markRecoverySent(cardId);
+                        setSent((s) => new Set([...s, cardId]));
+                        toast.success('Recovery campaign sent & logged!');
+                      } catch {
+                        toast.error('Failed to send recovery campaign');
+                      } finally {
+                        setSending((s) => { const n = new Set(s); n.delete(cardId); return n; });
+                      }
+                    }}
+                    disabled={hasSent || sending.has(cardId)}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                       hasSent
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : sending.has(cardId)
+                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                         : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20'
                     }`}
                   >
                     {hasSent ? (
                       <>
                         <Check className="w-4 h-4" /> Recovery Link Sent!
+                      </>
+                    ) : sending.has(cardId) ? (
+                      <>
+                        <RotateCcw className="w-4 h-4 animate-spin" /> Sending...
                       </>
                     ) : (
                       <>

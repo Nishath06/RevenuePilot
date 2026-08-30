@@ -25,7 +25,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const res = await authAPI.login({ email, password });
           const { access_token, user } = res.data;
-          const role = user.role;
+          const role = user.role || 'merchant';
           if (role !== 'merchant' && role !== 'admin') {
             throw new Error('Access denied: merchant account required');
           }
@@ -48,7 +48,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const res = await authAPI.me();
           const user = res.data;
-          const role = user.role;
+          const role = user.role || 'merchant';
           if (role !== 'merchant' && role !== 'admin') {
             get().logout();
             return;

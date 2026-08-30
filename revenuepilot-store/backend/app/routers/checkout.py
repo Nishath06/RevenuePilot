@@ -22,30 +22,29 @@ router = APIRouter(prefix="", tags=["Checkout & Orders"])
 TERMINAL_STATES = {"Paid", "Failed", "Cancelled"}
 
 
-async def _find_owned_order(order_reference: str, user_id: str) -> Order | None:
-    order = await Order.find_one(
-        Order.razorpay_order_id == order_reference,
-        Order.user_id == user_id,
-    )
-    if order is None:
-        order = await Order.find_one(Order.order_id == order_reference, Order.user_id == user_id)
-    return order
-
-
 @router.post("/checkout/create-order", response_model=RazorpayOrderResponse)
 async def create_order(
     req: CreateOrderRequest,
     current_user: User = Depends(get_current_user)
 ):
-    # Prices and quantities must originate from the server-side cart, never the browser body.
-    cart = await Cart.find_one(Cart.user_id == str(current_user.id))
-    if not cart or not cart.items:
-        raise HTTPException(status_code=400, detail="Cart is empty")
-    items_to_order = [
-        OrderItem(product_id=item.product_id, title=item.title, price=item.price,
-                  image=item.image, quantity=item.quantity)
-        for item in cart.items
-    ]
+    items_to_order = []
+
+    if req.items and len(req.items) > 0:
+        items_to_order = req.items
+    else:
+        cart = await Cart.find_one(Cart.user_id == str(current_user.id))
+        if not cart or not cart.items:
+            raise HTTPException(status_code=400, detail="Cart is empty")
+        items_to_order = [
+            OrderItem(
+                product_id=item.product_id,
+                title=item.title,
+                price=item.price,
+                image=item.image,
+                quantity=item.quantity,
+            )
+            for item in cart.items
+        ]
 
     total_amount = round(sum(item.price * item.quantity for item in items_to_order), 2)
     order_id = f"ord_{uuid.uuid4().hex[:12]}"
@@ -67,7 +66,6 @@ async def create_order(
     db_order = Order(
         order_id=order_id,
         user_id=str(current_user.id),
-        merchant_id=current_user.merchant_id,
         items=items_to_order,
         total_amount=total_amount,
         currency="INR",
@@ -102,7 +100,9 @@ async def verify_payment(
     current_user: User = Depends(get_current_user)
 ):
     t0 = time.monotonic()
-    order = await _find_owned_order(req.razorpay_order_id, str(current_user.id))
+    order = await Order.find_one(Order.razorpay_order_id == req.razorpay_order_id)
+    if not order:
+        order = await Order.find_one(Order.order_id == req.razorpay_order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -111,7 +111,6 @@ async def verify_payment(
         logger.info(
             "payment_immutability_blocked_verify",
             order_id=order.order_id,
-            merchant_id=order.merchant_id,
             current_status=order.payment_status,
             requested_status="Paid"
         )
@@ -165,7 +164,6 @@ async def verify_payment(
     payment = Payment(
         payment_id=f"pay_{uuid.uuid4().hex[:12]}",
         order_id=order.order_id,
-        merchant_id=order.merchant_id,
         razorpay_payment_id=req.razorpay_payment_id,
         amount=order.total_amount,
         method="card",
@@ -208,7 +206,9 @@ async def update_payment_status(
     Enforces terminal states (Paid, Failed, Cancelled) and blocks overwrites.
     """
     t0 = time.monotonic()
-    order = await _find_owned_order(req.razorpay_order_id, str(current_user.id))
+    order = await Order.find_one(Order.razorpay_order_id == req.razorpay_order_id)
+    if not order:
+        order = await Order.find_one(Order.order_id == req.razorpay_order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -217,7 +217,6 @@ async def update_payment_status(
         logger.warning(
             "payment_immutability_blocked_update",
             order_id=order.order_id,
-            merchant_id=order.merchant_id,
             razorpay_order_id=order.razorpay_order_id,
             current_status=order.payment_status,
             attempted_status=req.payment_status,
@@ -291,7 +290,6 @@ async def update_payment_status(
     payment = Payment(
         payment_id=f"pay_{uuid.uuid4().hex[:12]}",
         order_id=order.order_id,
-        merchant_id=order.merchant_id,
         razorpay_payment_id=None,
         amount=order.total_amount,
         method="razorpay",

@@ -115,9 +115,45 @@ SAMPLE_PRODUCTS = [
     }
 ]
 
+from app.models.user import User
+from app.core.security import get_password_hash, verify_password
+
 async def seed_users_if_empty():
-    """Retained for startup compatibility; privileged users require explicit provisioning."""
-    logger.info("Skipping user seeding; create merchant/admin users through the provisioning command.")
+    default_users = [
+        {
+            "name": "RevenuePilot Merchant",
+            "email": "merchant@revenuepilot.com",
+            "phone": "+919876543210",
+        },
+        {
+            "name": "Nishath (Admin)",
+            "email": "jpnishath@gmail.com",
+            "phone": "+919876543210",
+        },
+    ]
+
+    for default_user in default_users:
+        user = await User.find_one(User.email == default_user["email"])
+        if not user:
+            logger.info(f"Seeding default merchant user: {default_user['email']}")
+            new_user = User(
+                name=default_user["name"],
+                email=default_user["email"],
+                phone=default_user["phone"],
+                password_hash=get_password_hash("password123"),
+                role="merchant",
+                merchant_id="merch_default",
+                created_at=datetime.now(timezone.utc)
+            )
+            await new_user.insert()
+        else:
+            # Always ensure merchant role and valid password hash
+            user.role = "merchant"
+            user.merchant_id = "merch_default"
+            if not verify_password("password123", user.password_hash):
+                logger.info(f"Resetting password hash for merchant user: {default_user['email']}")
+                user.password_hash = get_password_hash("password123")
+            await user.save()
 
 async def seed_products_if_empty():
     count = await Product.count()

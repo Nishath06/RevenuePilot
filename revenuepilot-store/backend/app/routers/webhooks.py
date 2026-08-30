@@ -66,7 +66,6 @@ async def razorpay_webhook(
                         payment = Payment(
                             payment_id=f"pay_{uuid.uuid4().hex[:12]}",
                             order_id=order.order_id,
-                            merchant_id=order.merchant_id,
                             razorpay_payment_id=rzp_payment_id,
                             amount=payment_entity.get("amount", order.total_amount * 100) / 100.0,
                             method=payment_entity.get("method", "card"),
@@ -98,7 +97,6 @@ async def razorpay_webhook(
                         payment = Payment(
                             payment_id=f"pay_{uuid.uuid4().hex[:12]}",
                             order_id=order.order_id,
-                            merchant_id=order.merchant_id,
                             razorpay_payment_id=rzp_payment_id,
                             amount=payment_entity.get("amount", order.total_amount * 100) / 100.0,
                             method=payment_entity.get("method", "card"),

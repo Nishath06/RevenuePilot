@@ -3,12 +3,15 @@ import { motion } from 'framer-motion';
 import { KPICard } from '../components/cards/KPICard';
 import { AlertCircle, AlertTriangle, CheckCircle, Database, Zap, CreditCard, RefreshCw, ShieldAlert, Check } from 'lucide-react';
 import { aiAPI } from '../services/api';
+import { merchantIntelAPI } from '../services/api';
+import toast from 'react-hot-toast';
 
 export const IncidentsPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [resolving, setResolving] = useState<Set<string>>(new Set());
 
   const loadData = async () => {
     try {
@@ -29,11 +32,29 @@ export const IncidentsPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleResolve = (id: string) => {
+  const handleResolve = async (id: string) => {
+    if (!id) return;
+    // Optimistic update
     setIncidents((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: 'resolved' } : item))
     );
+    setResolving((s) => new Set([...s, id]));
+    try {
+      await merchantIntelAPI.resolveIncident(id);
+      toast.success('Incident resolved and saved');
+    } catch (err) {
+      console.error('Failed to resolve incident in MongoDB', err);
+      // Rollback optimistic update on failure
+      setIncidents((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status: 'open' } : item))
+      );
+      toast.error('Failed to resolve incident — please retry');
+    } finally {
+      setResolving((s) => { const n = new Set(s); n.delete(id); return n; });
+    }
   };
+
+
 
   const getSeverityBadge = (sev: string) => {
     switch (sev) {

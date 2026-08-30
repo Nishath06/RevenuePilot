@@ -158,6 +158,50 @@ async def get_recovery_stats():
     return await recovery_service.get_recovery_stats()
 
 
+@router.post("/recovery/mark-sent")
+async def mark_recovery_campaign_sent(payload: Dict[str, Any]):
+    """
+    Mark a recovery campaign as sent and persist to MongoDB.
+    """
+    db = get_mongodb()
+    campaign_id = payload.get("campaign_id") or payload.get("order_id")
+    if not campaign_id:
+        return {"success": False, "error": "campaign_id required"}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.recovery_campaigns.update_one(
+        {"$or": [{"campaign_id": campaign_id}, {"order_id": campaign_id}, {"id": campaign_id}]},
+        {"$set": {"status": "sent", "sent_at": now_iso}},
+        upsert=False
+    )
+    return {"success": True, "campaign_id": campaign_id, "status": "sent", "sent_at": now_iso}
+
+
+@router.post("/email/send-test")
+async def send_test_email(payload: Dict[str, Any]):
+    """
+    PART 5 — Send Test Email via SMTP/Simulation and record execution log.
+    """
+    from app.services.email_service import email_service
+    to_email = payload.get("to_email") or payload.get("email") or "merchant@revenuepilot.com"
+    subject = payload.get("subject", "RevenuePilot AI — Test System Notification")
+    body_text = payload.get("body", "This is a test notification from your RevenuePilot Autonomous Operating System.")
+    
+    result = email_service.send_email(to_email=to_email, subject=subject, body_text=body_text)
+
+    # Log to execution_history
+    db = get_mongodb()
+    exec_log = {
+        "execution_id": f"exec_email_{uuid.uuid4().hex[:8]}",
+        "rule_name": "Test Email Notification",
+        "trigger": "MANUAL_TEST_TRIGGER",
+        "status": result.get("status", "completed"),
+        "details": result,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.execution_history.insert_one(exec_log)
+    return result
+
+
 # ─── PART 6: CUSTOMER PREFERENCE MEMORY ──────────────────────────────────────
 
 @router.get("/ai/preferences")
@@ -681,14 +725,36 @@ async def api_run_demo_schedulers():
     """
     return await demo_data_service.run_all_schedulers()
 
+LAMBDAS = [
+    "InventoryLambda",
+    "RecoveryLambda",
+    "ReportsLambda",
+    "IncidentLambda",
+    "CloudWatchLambda",
+]
+
+
 @router.post("/demo/run-lambdas")
 async def api_run_demo_lambdas():
     """
     POST /automation/demo/run-lambdas
-    Executes simulated Lambda functions and records execution logs.
+    Executes all 5 simulated AWS Lambda functions and records execution logs.
     """
+    invoked_results = []
+    for fn in LAMBDAS:
+        res = await cloud_event_bus.invoke_lambda_function(
+            function_name=fn,
+            payload={"trigger": "manual_demo_invocation", "source": "automation_center"}
+        )
+        invoked_results.append(res)
+
     await demo_data_service.generate_simulated_lambdas_and_metrics(days=30)
-    return {"status": "success", "message": "Invoked all 5 AWS Lambda functions (Inventory, Recovery, Reports, Incident, CloudWatch)"}
+    return {
+        "status": "success",
+        "message": f"Invoked all {len(LAMBDAS)} AWS Lambda functions ({', '.join(LAMBDAS)})",
+        "lambdas": LAMBDAS,
+        "executions": invoked_results,
+    }
 
 @router.post("/demo/run-reports")
 async def api_run_demo_reports():

@@ -89,15 +89,70 @@ class DemoDataService:
 
         logger.info(f"Generating full demo dataset: {orders_count} orders, {customers_count} customers, {products_count} products...")
 
-        # Clear existing collections
+        # Clear existing collections (preserve users collection so logins remain active)
         collections_to_clear = [
-            "orders", "payments", "customers", "users", "products", "inventory", "inventory_events",
+            "orders", "payments", "customers", "products", "inventory", "inventory_events",
             "recovery_campaigns", "reports", "generated_reports", "events", "lambda_executions",
             "cloudwatch_metrics", "execution_history", "incidents", "watchdog_snapshots",
             "aws_audit_logs", "webhooks"
         ]
         for col in collections_to_clear:
             await db[col].delete_many({})
+
+        # Ensure merchant user accounts always exist with valid password hash
+        import bcrypt
+        pwd_hash = bcrypt.hashpw("password123".encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
+        merchant_users = [
+            {"email": "merchant@revenuepilot.com", "name": "RevenuePilot Merchant", "phone": "+919876543210"},
+            {"email": "jpnishath@gmail.com", "name": "Nishath Admin", "phone": "+919876543210"}
+        ]
+        for m in merchant_users:
+            await db.users.update_one(
+                {"email": m["email"]},
+                {
+                    "$set": {
+                        "name": m["name"],
+                        "phone": m["phone"],
+                        "password_hash": pwd_hash,
+                        "role": "merchant",
+                        "merchant_id": merchant_id,
+                        "created_at": start_date.isoformat()
+                    }
+                },
+                upsert=True
+            )
+
+        # Generate 15 legitimate customer users in 'users' collection with role='customer'
+        legit_customer_users = []
+        for i in range(15):
+            fname = FIRST_NAMES[i % len(FIRST_NAMES)]
+            lname = LAST_NAMES[i % len(LAST_NAMES)]
+            city, state = INDIAN_CITIES[i % len(INDIAN_CITIES)]
+            email = f"{fname.lower()}.{lname.lower()}{i+10}@gmail.com"
+            name = f"{fname} {lname}"
+            phone = f"+91 {random.randint(60000, 99999)} {random.randint(10000, 99999)}"
+
+            user_doc = {
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "password_hash": pwd_hash,
+                "role": "customer",
+                "merchant_id": merchant_id,
+                "created_at": (start_date + timedelta(days=random.randint(0, 10))).isoformat()
+            }
+            res = await db.users.update_one({"email": email}, {"$set": user_doc}, upsert=True)
+            saved_u = await db.users.find_one({"email": email})
+            u_id = str(saved_u["_id"])
+
+            legit_customer_users.append({
+                "user_id": u_id,
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "city": city,
+                "state": state
+            })
 
         # 1. PRODUCTS & INVENTORY
         products_docs = []
@@ -158,53 +213,26 @@ class DemoDataService:
         await db.products.insert_many(products_docs)
         await db.inventory.insert_many(products_docs)
 
-        # 2. CUSTOMERS
+        # 2. CUSTOMERS (Linked to 15 legitimate user accounts)
         customer_docs = []
         cust_ids = []
         segments = ["VIP", "Repeat", "Loyal", "At Risk", "One-Time", "Dormant"]
 
-        # Ensure default merchant Nishath is always present
-        nishath_cust = {
-            "customer_id": "cust_nishath_001",
-            "user_id": "usr_nishath",
-            "name": "Nishath Merchant",
-            "email": "jpnishath@gmail.com",
-            "phone": "+91 98765 43210",
-            "city": "Bengaluru",
-            "state": "Karnataka",
-            "country": "India",
-            "lifetime_value": 48500.0,
-            "orders_count": 12,
-            "last_purchase": (now - timedelta(hours=3)).isoformat(),
-            "preferred_payment_method": "UPI",
-            "preferred_channel": "WhatsApp",
-            "segment": "VIP",
-            "birthday": "1995-06-15",
-            "whatsapp_opt_in": True,
-            "email_verified": True,
-            "created_at": (now - timedelta(days=90)).isoformat(),
-        }
-        customer_docs.append(nishath_cust)
-        cust_ids.append("cust_nishath_001")
-
-        for i in range(1, customers_count):
-            c_id = f"cust_{i+100:03d}"
+        for i, cu in enumerate(legit_customer_users):
+            c_id = f"cust_{i+101:03d}"
             cust_ids.append(c_id)
-            fname = FIRST_NAMES[i % len(FIRST_NAMES)]
-            lname = LAST_NAMES[i % len(LAST_NAMES)]
-            city, state = INDIAN_CITIES[i % len(INDIAN_CITIES)]
             seg = segments[i % len(segments)]
-            order_cnt = random.randint(5, 20) if seg in ["VIP", "Loyal"] else (random.randint(2, 5) if seg in ["Repeat", "At Risk"] else 1)
+            order_cnt = random.randint(5, 20) if seg in ["VIP", "Loyal"] else random.randint(2, 5)
             ltv = float(round(order_cnt * random.uniform(800, 3500), 2))
 
             c_doc = {
                 "customer_id": c_id,
-                "user_id": f"usr_{i+100}",
-                "name": f"{fname} {lname}",
-                "email": f"{fname.lower()}.{lname.lower()}{random.randint(10,99)}@gmail.com",
-                "phone": f"+91 {random.randint(60000, 99999)} {random.randint(10000, 99999)}",
-                "city": city,
-                "state": state,
+                "user_id": cu["user_id"],
+                "name": cu["name"],
+                "email": cu["email"],
+                "phone": cu["phone"],
+                "city": cu["city"],
+                "state": cu["state"],
                 "country": "India",
                 "lifetime_value": ltv,
                 "orders_count": order_cnt,
@@ -213,7 +241,7 @@ class DemoDataService:
                 "preferred_channel": random.choice(["WhatsApp", "Email", "SMS"]),
                 "segment": seg,
                 "birthday": f"19{random.randint(80, 99)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}",
-                "whatsapp_opt_in": random.choice([True, True, True, False]),
+                "whatsapp_opt_in": True,
                 "email_verified": True,
                 "created_at": (start_date + timedelta(days=random.randint(0, 10))).isoformat(),
             }
@@ -221,23 +249,28 @@ class DemoDataService:
 
         await db.customers.insert_many(customer_docs)
 
-        # 3. ORDERS & PAYMENTS
+        # 3. ORDERS & PAYMENTS (Strictly Paid, Failed, Cancelled — No Pending)
         order_docs = []
         payment_docs = []
         webhook_docs = []
         incident_docs = []
 
-        # Order Status breakdown: 70% Paid, 10% Failed, 8% Cancelled, 7% Pending, 5% Refunded
-        statuses = ["Paid"] * 70 + ["Failed"] * 10 + ["Cancelled"] * 8 + ["Pending"] * 7 + ["Refunded"] * 5
+        # Order Status breakdown: 78% Paid, 14% Failed, 8% Cancelled (Pending excluded per specification)
+        statuses = ["Paid"] * 78 + ["Failed"] * 14 + ["Cancelled"] * 8
 
         for i in range(orders_count):
             o_id = f"ord_demo_{i+1001:04d}"
             c_doc = customer_docs[i % len(customer_docs)]
             c_id = c_doc["customer_id"]
 
-            # Festival / Weekend peak timestamps across 30 days
-            day_offset = random.randint(0, days - 1)
-            hour = random.choices([10, 11, 14, 15, 19, 20, 21, 22, 1, 2], k=1)[0]
+            # Evenly distribute orders across all 30 days + today (0 = 30d ago, 30 = today)
+            day_offset = i % (days + 1)
+            if day_offset == days:
+                # Today: generate timestamps up to current hour
+                curr_hour = max(1, now.hour)
+                hour = random.randint(0, curr_hour - 1) if curr_hour > 1 else 0
+            else:
+                hour = random.choices([10, 11, 14, 15, 19, 20, 21, 22, 1, 2], k=1)[0]
             created_dt = start_date + timedelta(days=day_offset, hours=hour, minutes=random.randint(0, 59))
 
             st = random.choice(statuses)
@@ -250,11 +283,11 @@ class DemoDataService:
 
             pm = random.choice(PAYMENT_METHODS)
             rzp_order_id = f"order_rzp_{uuid.uuid4().hex[:10]}"
-            rzp_pay_id = f"pay_rzp_{uuid.uuid4().hex[:10]}" if st in ["Paid", "Refunded"] else f"pay_fail_{uuid.uuid4().hex[:10]}"
+            rzp_pay_id = f"pay_rzp_{uuid.uuid4().hex[:10]}" if st == "Paid" else f"pay_fail_{uuid.uuid4().hex[:10]}"
             fail_reason = random.choice(FAILURE_REASONS) if st in ["Failed", "Cancelled"] else None
 
-            paid_dt = (created_dt + timedelta(seconds=random.randint(15, 120))).isoformat() if st in ["Paid", "Refunded"] else None
-            cancelled_dt = (created_dt + timedelta(minutes=random.randint(5, 30))).isoformat() if st == "Cancelled" else None
+            paid_dt = (created_dt + timedelta(seconds=random.randint(15, 120))) if st == "Paid" else None
+            cancelled_dt = (created_dt + timedelta(minutes=random.randint(5, 30))) if st == "Cancelled" else None
 
             order_doc = {
                 "order_id": o_id,
@@ -277,12 +310,12 @@ class DemoDataService:
                 "country": "India",
                 "payment_method": pm,
                 "payment_status": st,
-                "order_status": "Delivered" if st == "Paid" else ("Processing" if st == "Pending" else st),
+                "order_status": "Delivered" if st == "Paid" else st,
                 "razorpay_order_id": rzp_order_id,
                 "razorpay_payment_id": rzp_pay_id,
                 "gateway_id": "razorpay",
                 "failure_reason": fail_reason,
-                "created_at": created_dt.isoformat(),
+                "created_at": created_dt,
                 "paid_at": paid_dt,
                 "cancelled_at": cancelled_dt,
             }
@@ -302,7 +335,7 @@ class DemoDataService:
                 "error_code": fail_reason,
                 "razorpay_payment_id": rzp_pay_id,
                 "razorpay_order_id": rzp_order_id,
-                "created_at": created_dt.isoformat(),
+                "created_at": created_dt,
             }
             payment_docs.append(pay_doc)
 
@@ -318,7 +351,7 @@ class DemoDataService:
                         "order": {"entity": order_doc}
                     }
                 },
-                "created_at": created_dt.isoformat(),
+                "created_at": created_dt,
             }
             webhook_docs.append(wh_doc)
 
@@ -334,7 +367,7 @@ class DemoDataService:
                     "amount": total_amt,
                     "reason": fail_reason,
                     "assigned_to": "AutoOps Recovery Agent",
-                    "created_at": created_dt.isoformat(),
+                    "created_at": created_dt,
                 }
                 incident_docs.append(inc_doc)
 
@@ -375,7 +408,7 @@ class DemoDataService:
                 "status": status,
                 "recovered_amount": o["amount"] if status == "CONVERTED" else 0.0,
                 "created_at": o["created_at"],
-                "converted_at": (datetime.fromisoformat(o["created_at"]) + timedelta(minutes=45)).isoformat() if status == "CONVERTED" else None,
+                "converted_at": (o["created_at"] + timedelta(minutes=45)) if status == "CONVERTED" else None,
             }
             campaigns_docs.append(c_doc)
 

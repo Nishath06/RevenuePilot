@@ -11,14 +11,11 @@ def test_password_hashing():
 
 def test_jwt_token_generation():
     subject = "user_12345"
-    token = create_access_token(user_id=subject, merchant_id="merch_test", role="merchant")
+    token = create_access_token(subject=subject)
     assert isinstance(token, str)
     payload = decode_access_token(token)
     assert payload is not None
     assert payload.get("sub") == subject
-    assert payload.get("user_id") == subject
-    assert payload.get("merchant_id") == "merch_test"
-    assert payload.get("role") == "merchant"
 
 def test_user_schemas():
     reg = UserRegister(

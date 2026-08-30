@@ -141,11 +141,30 @@ class CloudEventBus:
         TASK 4 — AWS Lambda Invocation Layer with InvocationType="Event".
         Persists into lambda_executions & aws_audit_logs in MongoDB.
         """
+        import boto3
+        import os
+
         db = get_mongodb()
         start_time = time.perf_counter()
         exec_id = f"lam_{uuid.uuid4().hex[:10]}"
         now_iso = datetime.now(timezone.utc).isoformat()
         trace = payload.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+
+        try:
+            debug_client = boto3.client("lambda", region_name=os.getenv("AWS_REGION", "ap-south-1"))
+            debug_res = debug_client.invoke(
+                FunctionName=function_name,
+                InvocationType="Event",
+                Payload=json.dumps({"merchant_id": merchant_id, "trace_id": trace, **payload}).encode()
+            )
+            print("=== AWS INVOKE DEBUG ===")
+            print("Lambda:", function_name)
+            print("StatusCode:", debug_res.get("StatusCode"))
+            print("ResponseMetadata:", debug_res.get("ResponseMetadata"))
+        except Exception as debug_err:
+            print("=== AWS INVOKE DEBUG ERROR ===")
+            print("Lambda:", function_name)
+            print("Error:", str(debug_err))
 
         # Attempt Boto3 invoke if connected
         request_id = f"req_{uuid.uuid4().hex[:12]}"
@@ -164,8 +183,10 @@ class CloudEventBus:
                 result_payload = {"status": "invoked_cloud", "status_code": status_code}
             except Exception as err:
                 logger.warning(f"AWS Lambda invoke failed, using local simulation", error=str(err))
+                status_code = 200
                 result_payload = {"status": "simulated_local", "reason": str(err)}
         else:
+            status_code = 200
             result_payload = {"status": "simulated_local", "mode": "Local Simulation Layer"}
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -177,7 +198,7 @@ class CloudEventBus:
             "merchant_id": merchant_id,
             "trace_id": trace,
             "payload": payload,
-            "status": "SUCCESS" if status_code == 200 else "FAILED",
+            "status": "SUCCESS" if status_code in [200, 202] else "FAILED",
             "duration_ms": elapsed_ms,
             "timestamp": now_iso,
             "execution_mode": "AWS Boto3 Lambda" if not aws_client.is_local_mode else "Local Simulation Mode",

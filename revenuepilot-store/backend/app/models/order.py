@@ -19,7 +19,6 @@ class PaymentEvent(BaseModel):
 class Order(Document):
     order_id: Indexed(str, unique=True)
     user_id: Indexed(str)
-    merchant_id: Indexed(str) = "merch_default"
     items: List[OrderItem]
     total_amount: float
     currency: str = "INR"

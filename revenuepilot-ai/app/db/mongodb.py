@@ -78,22 +78,45 @@ get_mongodb = get_database
 
 
 async def _ensure_indexes() -> None:
-    """Ensure required indexes exist for optimal Motor aggregation performance."""
+    """Ensure required compound and TTL indexes exist for optimal Motor aggregation performance."""
     if _database is None:
         return
-    for coll_name, keys in [
-        ("orders", [("user_id", 1)]),
-        ("orders", [("payment_status", 1)]),
-        ("payments", [("status", 1)]),
-        ("payments", [("order_id", 1)]),
-        ("products", [("category", 1)]),
-        ("carts", [("user_id", 1)]),
-    ]:
+
+    index_specs = [
+        ("orders", [("user_id", 1), ("payment_status", 1)]),
+        ("orders", [("payment_status", 1), ("created_at", -1)]),
+        ("orders", [("created_at", -1)]),
+        ("payments", [("order_id", 1), ("status", 1)]),
+        ("payments", [("status", 1), ("created_at", -1)]),
+        ("products", [("category", 1), ("stock", 1)]),
+        ("products", [("stock", 1)]),
+        ("customers", [("merchant_id", 1), ("created_at", -1)]),
+        ("events", [("event_type", 1), ("timestamp", -1)]),
+        ("execution_history", [("timestamp", -1)]),
+        ("incidents", [("status", 1), ("severity", 1)]),
+        ("recovery_campaigns", [("status", 1), ("created_at", -1)]),
+        ("ai_conversations", [("merchant_id", 1), ("updated_at", -1)]),
+        ("ai_messages", [("conversation_id", 1), ("timestamp", 1)]),
+        ("merchant_settings", [("merchant_id", 1)]),
+    ]
+
+    for coll_name, keys in index_specs:
         try:
             await _database[coll_name].create_index(keys)
         except Exception:
             pass
-    logger.info("MongoDB aggregation indexes created/verified successfully")
+
+    # TTL indexes — auto-purge old events after 90 days
+    try:
+        await _database["events"].create_index([("timestamp", 1)], expireAfterSeconds=7776000)
+    except Exception:
+        pass
+    try:
+        await _database["execution_history"].create_index([("timestamp", 1)], expireAfterSeconds=7776000)
+    except Exception:
+        pass
+
+    logger.info("MongoDB compound and TTL indexes verified successfully")
 
 
 async def health_check() -> bool:
