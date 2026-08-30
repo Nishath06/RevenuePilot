@@ -22,29 +22,30 @@ router = APIRouter(prefix="", tags=["Checkout & Orders"])
 TERMINAL_STATES = {"Paid", "Failed", "Cancelled"}
 
 
+async def _find_owned_order(order_reference: str, user_id: str) -> Order | None:
+    order = await Order.find_one(
+        Order.razorpay_order_id == order_reference,
+        Order.user_id == user_id,
+    )
+    if order is None:
+        order = await Order.find_one(Order.order_id == order_reference, Order.user_id == user_id)
+    return order
+
+
 @router.post("/checkout/create-order", response_model=RazorpayOrderResponse)
 async def create_order(
     req: CreateOrderRequest,
     current_user: User = Depends(get_current_user)
 ):
-    items_to_order = []
-
-    if req.items and len(req.items) > 0:
-        items_to_order = req.items
-    else:
-        cart = await Cart.find_one(Cart.user_id == str(current_user.id))
-        if not cart or not cart.items:
-            raise HTTPException(status_code=400, detail="Cart is empty")
-        items_to_order = [
-            OrderItem(
-                product_id=item.product_id,
-                title=item.title,
-                price=item.price,
-                image=item.image,
-                quantity=item.quantity,
-            )
-            for item in cart.items
-        ]
+    # Prices and quantities must originate from the server-side cart, never the browser body.
+    cart = await Cart.find_one(Cart.user_id == str(current_user.id))
+    if not cart or not cart.items:
+        raise HTTPException(status_code=400, detail="Cart is empty")
+    items_to_order = [
+        OrderItem(product_id=item.product_id, title=item.title, price=item.price,
+                  image=item.image, quantity=item.quantity)
+        for item in cart.items
+    ]
 
     total_amount = round(sum(item.price * item.quantity for item in items_to_order), 2)
     order_id = f"ord_{uuid.uuid4().hex[:12]}"
@@ -100,9 +101,7 @@ async def verify_payment(
     current_user: User = Depends(get_current_user)
 ):
     t0 = time.monotonic()
-    order = await Order.find_one(Order.razorpay_order_id == req.razorpay_order_id)
-    if not order:
-        order = await Order.find_one(Order.order_id == req.razorpay_order_id)
+    order = await _find_owned_order(req.razorpay_order_id, str(current_user.id))
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -206,9 +205,7 @@ async def update_payment_status(
     Enforces terminal states (Paid, Failed, Cancelled) and blocks overwrites.
     """
     t0 = time.monotonic()
-    order = await Order.find_one(Order.razorpay_order_id == req.razorpay_order_id)
-    if not order:
-        order = await Order.find_one(Order.order_id == req.razorpay_order_id)
+    order = await _find_owned_order(req.razorpay_order_id, str(current_user.id))
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
