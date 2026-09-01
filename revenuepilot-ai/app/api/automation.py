@@ -838,3 +838,150 @@ async def api_reset_demo_store():
     summary = await reset_demo_database()
     return {"status": "success", "reset_summary": summary}
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ── RECOVERY AI — Autonomous Intelligence Engine (v4.0) ─────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from app.services.recovery_intelligence_agent import recovery_intelligence_agent
+from app.services.recovery_candidate_repository import RecoveryCandidateRepository
+
+_recovery_repo = RecoveryCandidateRepository()
+
+
+@router.post("/recovery/analyze")
+async def recovery_ai_analyze(payload: Optional[Dict[str, Any]] = None):
+    """
+    RECOVERY AI — POST /automation/recovery/analyze
+    Immediately runs the AI Recovery Intelligence Agent for the given merchant.
+    Analyzes all customers, generates LLM decisions, and writes APPROVED candidates
+    to `recovery_candidates` collection.
+    """
+    params = payload or {}
+    merchant_id = params.get("merchant_id", "merch_default")
+    trace_id = params.get("trace_id") or f"trace_api_{uuid.uuid4().hex[:8]}"
+
+    result = await recovery_intelligence_agent.run(
+        merchant_id=merchant_id,
+        trace_id=trace_id,
+    )
+    return result
+
+
+@router.post("/recovery/run-approved")
+async def recovery_run_approved(payload: Optional[Dict[str, Any]] = None):
+    """
+    RECOVERY AI — POST /automation/recovery/run-approved
+    Invokes RecoveryLambda for all APPROVED candidates.
+    RecoveryLambda reads from `recovery_candidates` and dispatches SES + SNS.
+    """
+    params = payload or {}
+    merchant_id = params.get("merchant_id", "merch_default")
+    trace_id = params.get("trace_id") or f"trace_api_{uuid.uuid4().hex[:8]}"
+
+    # Invoke the existing RecoveryLambda via cloud_event_bus
+    result = await cloud_event_bus.invoke_lambda_function(
+        function_name="RecoveryLambda",
+        payload={
+            "merchant_id": merchant_id,
+            "trace_id": trace_id,
+            "trigger": "api_run_approved",
+        },
+    )
+    return {"status": "RecoveryLambda invoked", "merchant_id": merchant_id, "trace_id": trace_id, "result": result}
+
+
+@router.get("/recovery/candidates")
+async def recovery_list_candidates(
+    merchant_id: str = "merch_default",
+    status: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+):
+    """
+    RECOVERY AI — GET /automation/recovery/candidates
+    Lists AI-generated recovery candidates with optional status filter.
+    Statuses: PENDING_AI_REVIEW | APPROVED | SCHEDULED | SENT | FAILED | SKIPPED | EXPIRED
+    """
+    candidates = await _recovery_repo.list_candidates(
+        merchant_id=merchant_id,
+        status=status,
+        limit=limit,
+    )
+    return {"candidates": candidates, "count": len(candidates), "merchant_id": merchant_id}
+
+
+@router.get("/recovery/history")
+async def recovery_campaign_history(
+    merchant_id: str = "merch_default",
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    RECOVERY AI — GET /automation/recovery/history
+    Returns dispatched campaign history from `recovery_campaigns` collection.
+    """
+    db = get_mongodb()
+    cursor = db.recovery_campaigns.find(
+        {"merchant_id": merchant_id}, {"_id": 0}
+    ).sort("created_at", -1).limit(limit)
+    campaigns = await cursor.to_list(length=limit)
+    return {"campaigns": campaigns, "count": len(campaigns)}
+
+
+@router.get("/recovery/insights")
+@router.get("/recovery/analytics")
+async def recovery_ai_analytics(merchant_id: str = "merch_default"):
+    """
+    RECOVERY AI — GET /automation/recovery/insights
+    Returns AI dashboard metrics:
+    customers analyzed, approved candidates, recoverable revenue,
+    AI confidence average, top segments, top recovery reasons.
+
+    Example:
+    {
+      "customers_analyzed": 650,
+      "approved_candidates": 42,
+      "recoverable_revenue": 182450,
+      "average_ai_score": 91.3,
+      "top_reason": "Gateway timeout on high-value cart"
+    }
+    """
+    analytics = await _recovery_repo.get_analytics(merchant_id=merchant_id)
+
+    # Add top_reason convenience field
+    reasons = analytics.get("top_recovery_reasons", [])
+    analytics["top_reason"] = reasons[0] if reasons else "No candidates analyzed yet"
+
+    return analytics
+
+
+@router.post("/recovery/approve/{candidate_id}")
+async def recovery_approve_candidate(candidate_id: str):
+    """
+    RECOVERY AI — POST /automation/recovery/approve/{candidate_id}
+    Manually approves a PENDING_AI_REVIEW candidate for dispatch.
+    """
+    updated = await _recovery_repo.update_status(
+        candidate_id=candidate_id,
+        status="APPROVED",
+        extra={"approved_at": datetime.now(timezone.utc).isoformat(), "approval_source": "manual_api"},
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Candidate not found or already processed")
+    return {"status": "APPROVED", "candidate_id": candidate_id}
+
+
+@router.post("/recovery/skip/{candidate_id}")
+async def recovery_skip_candidate(candidate_id: str):
+    """
+    RECOVERY AI — POST /automation/recovery/skip/{candidate_id}
+    Manually skips a candidate (moves to SKIPPED status).
+    """
+    updated = await _recovery_repo.update_status(
+        candidate_id=candidate_id,
+        status="SKIPPED",
+        extra={"skip_reason": "MANUAL_SKIP", "skipped_at": datetime.now(timezone.utc).isoformat()},
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    return {"status": "SKIPPED", "candidate_id": candidate_id}
+
