@@ -97,7 +97,7 @@ class GeminiProvider(BaseLLMProvider):
             raise ValueError("Configuration Error: GEMINI_API_KEY is missing in environment.")
 
         base_url = (os.getenv("GEMINI_BASE_URL") or settings.GEMINI_BASE_URL or "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/")
-        model = os.getenv("GEMINI_MODEL") or settings.GEMINI_MODEL or "gemini-3.6-flash"
+        model = os.getenv("GEMINI_MODEL") or settings.GEMINI_MODEL or "gemini-3.5-flash"
 
         super().__init__(name="gemini", model=model)
         self.api_key = api_key

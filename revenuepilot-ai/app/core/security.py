@@ -26,6 +26,6 @@ async def verify_api_key(credentials: HTTPAuthorizationCredentials | None = Secu
         principal = Principal(str(claims["user_id"]), str(claims["merchant_id"]), str(claims["role"]))
     except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token") from exc
-    if principal.role not in {"merchant", "admin"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Merchant role required")
+    if principal.role not in {"merchant", "admin", "customer"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Merchant or authenticated user role required")
     return principal

@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"
     AI_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.6-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     GROK_API_KEY: str = ""
     GROK_MODEL: str = "grok-4-fast"
