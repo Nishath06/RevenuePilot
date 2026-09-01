@@ -187,7 +187,31 @@ class CloudEventBus:
                 result_payload = {"status": "simulated_local", "reason": str(err)}
         else:
             status_code = 200
-            result_payload = {"status": "simulated_local", "mode": "Local Simulation Layer"}
+            # Execute actual local Python Lambda handler if available
+            handler_map = {
+                "InventoryLambda": "aws_lambda.inventory_lambda",
+                "RecoveryLambda": "aws_lambda.recovery_lambda",
+                "ReportsLambda": "aws_lambda.reports_lambda",
+                "IncidentLambda": "aws_lambda.incident_lambda",
+                "CloudWatchLambda": "aws_lambda.cloudwatch_lambda",
+            }
+            local_module_path = handler_map.get(function_name)
+            handler_result = {}
+            if local_module_path:
+                try:
+                    import importlib
+                    mod = importlib.import_module(local_module_path)
+                    res_raw = mod.lambda_handler({"merchant_id": merchant_id, "trace_id": trace, **payload}, None)
+                    if isinstance(res_raw, dict) and "body" in res_raw:
+                        body_val = res_raw["body"]
+                        handler_result = json.loads(body_val) if isinstance(body_val, str) else body_val
+                    else:
+                        handler_result = res_raw
+                except Exception as local_err:
+                    logger.warning(f"Local Python Lambda execution warning for {function_name}: {local_err}")
+                    handler_result = {"status": "simulated_local", "error": str(local_err)}
+
+            result_payload = {"status": "simulated_local", "mode": "Local Simulation Layer", "output": handler_result}
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 

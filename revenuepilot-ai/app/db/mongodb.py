@@ -63,9 +63,27 @@ async def close_mongodb_connection() -> None:
 
 
 def get_database() -> motor.motor_asyncio.AsyncIOMotorDatabase:
-    """Return the active database instance."""
-    if _database is None:
+    """Return the active database instance, recreating Motor client if running loop changed."""
+    global _client, _database
+    if _client is None:
         raise RuntimeError("MongoDB is not connected. Call connect_to_mongodb() first.")
+
+    try:
+        current_loop = asyncio.get_running_loop()
+        client_loop = getattr(_client, "get_io_loop", lambda: None)() or getattr(_client, "io_loop", None)
+        if client_loop and client_loop != current_loop and not current_loop.is_closed():
+            _client = motor.motor_asyncio.AsyncIOMotorClient(
+                settings.MONGODB_URL,
+                maxPoolSize=20,
+                minPoolSize=5,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+                socketTimeoutMS=30000,
+            )
+            _database = _client[settings.DATABASE_NAME]
+    except Exception:
+        pass
+
     return _database
 
 
@@ -122,9 +140,10 @@ async def _ensure_indexes() -> None:
 async def health_check() -> bool:
     """Return True if MongoDB is reachable."""
     try:
-        if _client is None:
-            return False
-        await _client.admin.command("ping")
-        return True
+        db = get_database()
+        if db is not None:
+            await db.command("ping")
+            return True
+        return False
     except Exception:
         return False

@@ -17,14 +17,21 @@ def get_password_hash(password: str) -> str:
     hashed = bcrypt.hashpw(pwd_bytes, salt)
     return hashed.decode('utf-8')
 
-def create_access_token(*, user_id: str, merchant_id: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(
+    user_id: Optional[str] = None,
+    subject: Optional[str] = None,
+    merchant_id: str = "merch_default",
+    role: str = "merchant",
+    expires_delta: Optional[timedelta] = None
+) -> str:
+    uid = user_id or subject or "user_default"
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     issued_at = datetime.now(timezone.utc)
-    to_encode = {"exp": expire, "sub": str(user_id), "user_id": str(user_id), "merchant_id": merchant_id, "role": role, "iat": issued_at}
+    to_encode = {"exp": expire, "sub": str(uid), "user_id": str(uid), "merchant_id": merchant_id, "role": role, "iat": issued_at}
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
