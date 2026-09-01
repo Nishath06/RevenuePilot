@@ -55,8 +55,9 @@ def generate_recovery_coupon(scenario: str, amount: float) -> Dict[str, Any]:
 def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
     """
     AWS Lambda entry point for Recovery Campaign Orchestration.
-    Reads failed payments/orders from MongoDB Atlas or payload event,
-    skips duplicates within 48h, creates recovery campaigns, and sends communications.
+    Reads pending recovery candidates from MongoDB Atlas `recovery_candidates` collection or payload event,
+    skips duplicates within 48h and expired candidates, dispatches SES email & SNS SMS with retries,
+    updates candidate status (PENDING, SENT, FAILED, SKIPPED), and records communications & audit logs.
     """
     db = get_database()
     merchant_id = event.get("merchant_id", "merch_default") if isinstance(event, dict) else "merch_default"
@@ -69,85 +70,151 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
     # Targets to process
     targets: List[Dict[str, Any]] = []
 
-    # Direct payload target if provided
+    # 1. Direct payload target if provided
     if isinstance(event, dict) and (event.get("customer_email") or event.get("order_id")):
         targets.append({
+            "candidate_id": event.get("candidate_id", f"cand_{uuid.uuid4().hex[:8]}"),
             "order_id": event.get("order_id", f"ord_rec_{uuid.uuid4().hex[:6]}"),
             "customer_name": event.get("customer_name", "Valued Customer"),
             "customer_email": sanitize_email(event.get("customer_email")),
             "customer_phone": sanitize_phone(event.get("customer_phone")),
             "amount": float(event.get("amount") or 2999.0),
             "event_type": event_type,
+            "merchant_id": merchant_id,
+            "expires_at": event.get("expires_at")
         })
     elif db is not None:
         try:
-            # Query recent failed payments or cancelled orders from MongoDB
-            cutoff_dt = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
-            cursor = db.payments.find(
-                {
-                    "status": {"$in": ["failed", "FAILED", "cancelled", "CANCELLED"]},
-                    "created_at": {"$gte": cutoff_dt}
-                },
-                {"_id": 0}
-            ).limit(50)
-            failed_payments = list(cursor)
+            # Query pending recovery_candidates from MongoDB Atlas with merchant filtering
+            cand_query: Dict[str, Any] = {"status": {"$in": ["PENDING", "pending"]}}
+            if merchant_id and merchant_id != "all":
+                cand_query["merchant_id"] = merchant_id
 
-            for p in failed_payments:
+            cursor = db.recovery_candidates.find(cand_query).limit(50)
+            pending_docs = list(cursor)
+
+            for doc in pending_docs:
+                clean_doc = serialize_bson(doc)
                 targets.append({
-                    "order_id": p.get("order_id", f"ord_{uuid.uuid4().hex[:6]}"),
-                    "customer_name": p.get("customer_name", "Customer"),
-                    "customer_email": sanitize_email(p.get("customer_email")),
-                    "customer_phone": sanitize_phone(p.get("customer_phone")),
-                    "amount": float(p.get("amount") or 1999.0),
-                    "event_type": "PAYMENT_FAILED" if "fail" in str(p.get("status")).lower() else "ORDER_CANCELLED",
+                    "candidate_id": clean_doc.get("candidate_id") or str(doc.get("_id")),
+                    "order_id": clean_doc.get("order_id", f"ord_{uuid.uuid4().hex[:6]}"),
+                    "customer_name": clean_doc.get("customer_name", "Customer"),
+                    "customer_email": sanitize_email(clean_doc.get("customer_email")),
+                    "customer_phone": sanitize_phone(clean_doc.get("customer_phone")),
+                    "amount": float(clean_doc.get("amount") or 1999.0),
+                    "event_type": clean_doc.get("event_type", "PAYMENT_FAILED"),
+                    "merchant_id": clean_doc.get("merchant_id", merchant_id),
+                    "expires_at": clean_doc.get("expires_at"),
+                    "mongo_id": doc.get("_id")
                 })
         except Exception as err:
-            logger.warning(f"[RecoveryLambda] MongoDB query fallback: {err}")
+            logger.warning(f"[RecoveryLambda] MongoDB recovery_candidates fetch fallback: {err}")
+
+        # Fallback to failed payments collection if no recovery_candidates found
+        if not targets:
+            try:
+                cutoff_dt = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+                pay_query: Dict[str, Any] = {
+                    "status": {"$in": ["failed", "FAILED", "cancelled", "CANCELLED"]},
+                    "created_at": {"$gte": cutoff_dt}
+                }
+                if merchant_id and merchant_id != "all":
+                    pay_query["merchant_id"] = merchant_id
+
+                cursor = db.payments.find(pay_query, {"_id": 0}).limit(50)
+                failed_payments = list(cursor)
+
+                for p in failed_payments:
+                    targets.append({
+                        "candidate_id": f"cand_{uuid.uuid4().hex[:8]}",
+                        "order_id": p.get("order_id", f"ord_{uuid.uuid4().hex[:6]}"),
+                        "customer_name": p.get("customer_name", "Customer"),
+                        "customer_email": sanitize_email(p.get("customer_email")),
+                        "customer_phone": sanitize_phone(p.get("customer_phone")),
+                        "amount": float(p.get("amount") or 1999.0),
+                        "event_type": "PAYMENT_FAILED" if "fail" in str(p.get("status")).lower() else "ORDER_CANCELLED",
+                        "merchant_id": p.get("merchant_id", merchant_id),
+                        "expires_at": None
+                    })
+            except Exception as err:
+                logger.warning(f"[RecoveryLambda] MongoDB payments query fallback: {err}")
 
     # Fallback target if empty
     if not targets:
         targets.append({
+            "candidate_id": f"cand_demo_{uuid.uuid4().hex[:6]}",
             "order_id": f"ord_demo_{uuid.uuid4().hex[:6]}",
             "customer_name": "Rohan Sharma",
             "customer_email": "rohan@example.com",
             "customer_phone": "+919876543210",
             "amount": 4999.0,
-            "event_type": event_type
+            "event_type": event_type,
+            "merchant_id": merchant_id,
+            "expires_at": None
         })
 
     emails_sent = 0
     sms_sent = 0
     campaigns_created = 0
     deduped_count = 0
+    skipped_expired_count = 0
+    failed_count = 0
 
     ses_client = get_boto3_client("ses")
     sns_client = get_boto3_client("sns")
 
     now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
     dedupe_cutoff = (now_dt - timedelta(hours=48)).isoformat()
 
     # Process targets
     for target in targets:
+        c_id = target.get("candidate_id")
         c_email = target["customer_email"]
         c_phone = target["customer_phone"]
         c_name = target["customer_name"]
         o_id = target["order_id"]
         amt = target["amount"]
         evt = target["event_type"]
+        t_merchant = target.get("merchant_id", merchant_id)
+        exp_at = target.get("expires_at")
 
-        # Deduplication check in MongoDB (skip if recovery campaign created for same email/order in last 48h)
-        if db is not None and c_email:
+        # 1. Expiration check
+        if exp_at and exp_at < now_iso:
+            skipped_expired_count += 1
+            logger.info(f"[RecoveryLambda] Candidate {c_id} expired at {exp_at}. Status -> SKIPPED")
+            if db is not None and c_id:
+                try:
+                    db.recovery_candidates.update_one(
+                        {"$or": [{"candidate_id": c_id}, {"_id": target.get("mongo_id")}]},
+                        {"$set": {"status": "SKIPPED", "skip_reason": "EXPIRED", "updated_at": now_iso}}
+                    )
+                except Exception:
+                    pass
+            continue
+
+        # 2. Deduplication check in MongoDB (skip if recovery campaign created for same email/order in last 48h)
+        if db is not None and (c_email or o_id):
             try:
-                recent = db.recovery_campaigns.find_one({
-                    "$or": [{"customer_email": c_email}, {"order_id": o_id}],
+                recent_query: Dict[str, Any] = {
+                    "$or": [k for k in [{"customer_email": c_email}, {"order_id": o_id}] if k.values()],
                     "created_at": {"$gte": dedupe_cutoff}
-                })
+                }
+                if t_merchant and t_merchant != "all":
+                    recent_query["merchant_id"] = t_merchant
+
+                recent = db.recovery_campaigns.find_one(recent_query)
                 if recent:
                     deduped_count += 1
                     logger.info(f"[RecoveryLambda] Skipping duplicate recovery for {c_email} / {o_id}")
+                    if c_id:
+                        db.recovery_candidates.update_one(
+                            {"$or": [{"candidate_id": c_id}, {"_id": target.get("mongo_id")}]},
+                            {"$set": {"status": "SKIPPED", "skip_reason": "DUPLICATE_48H", "updated_at": now_iso}}
+                        )
                     continue
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning(f"[RecoveryLambda] Dedupe query exception: {err}")
 
         coupon = generate_recovery_coupon(evt, amt)
         campaign_id = f"cmp_{uuid.uuid4().hex[:10]}"
@@ -166,7 +233,7 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
             f"Use code *{coupon['coupon_code']}* for {coupon['discount_percentage']}% OFF today only!"
         )
 
-        # Dispatch Email (SES or Local Sim)
+        # Dispatch Email (SES with 2 retries or Local Sim)
         email_success = False
         if config.is_local_mode or not ses_client:
             email_success = True
@@ -175,12 +242,16 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
                 try:
                     db.communication_logs.insert_one({
                         "log_id": f"log_email_{uuid.uuid4().hex[:6]}",
+                        "merchant_id": t_merchant,
+                        "trace_id": trace_id,
+                        "candidate_id": c_id,
                         "channel": "SES_EMAIL",
                         "recipient": c_email or "simulated@example.com",
                         "subject": email_subject,
                         "body": email_body,
                         "status": "SIMULATED_SUCCESS",
-                        "created_at": now_dt.isoformat()
+                        "created_at": now_iso,
+                        "timestamp": now_iso
                     })
                 except Exception:
                     pass
@@ -200,9 +271,9 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
                         emails_sent += 1
                         break
                     except Exception as err:
-                        logger.warning(f"[RecoveryLambda] SES attempt {attempt} failed: {err}")
+                        logger.warning(f"[RecoveryLambda] SES attempt {attempt} failed for {c_email}: {err}")
 
-        # Dispatch SMS (SNS or Local Sim)
+        # Dispatch SMS (SNS with 2 retries or Local Sim)
         sms_success = False
         if config.is_local_mode or not sns_client:
             sms_success = True
@@ -211,11 +282,15 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
                 try:
                     db.communication_logs.insert_one({
                         "log_id": f"log_sms_{uuid.uuid4().hex[:6]}",
+                        "merchant_id": t_merchant,
+                        "trace_id": trace_id,
+                        "candidate_id": c_id,
                         "channel": "SNS_SMS",
                         "recipient": c_phone or "+919876543210",
                         "message": f"RevenuePilot: Code {coupon['coupon_code']} for {coupon['discount_percentage']}% OFF!",
                         "status": "SIMULATED_SUCCESS",
-                        "created_at": now_dt.isoformat()
+                        "created_at": now_iso,
+                        "timestamp": now_iso
                     })
                 except Exception:
                     pass
@@ -231,12 +306,17 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
                         sms_sent += 1
                         break
                     except Exception as err:
-                        logger.warning(f"[RecoveryLambda] SNS attempt {attempt} failed: {err}")
+                        logger.warning(f"[RecoveryLambda] SNS attempt {attempt} failed for {c_phone}: {err}")
 
-        # Persist Campaign
+        overall_status = "SENT" if (email_success or sms_success) else "FAILED"
+        if overall_status == "FAILED":
+            failed_count += 1
+
+        # Persist Campaign Document
         campaign_doc = {
             "campaign_id": campaign_id,
-            "merchant_id": merchant_id,
+            "candidate_id": c_id,
+            "merchant_id": t_merchant,
             "order_id": o_id,
             "customer_name": c_name,
             "customer_email": c_email,
@@ -246,20 +326,31 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
             "coupon": coupon,
             "channel": "WhatsApp + Email + SMS",
             "title": f"Recovery Offer ({coupon['discount_percentage']}% OFF)",
-            "status": "SENT",
+            "status": overall_status,
             "email_sent": email_success,
             "sms_sent": sms_success,
             "whatsapp_preview": whatsapp_copy,
-            "created_at": now_dt.isoformat(),
-            "timestamp": now_dt.isoformat()
+            "created_at": now_iso,
+            "timestamp": now_iso
         }
         campaigns_created += 1
 
         if db is not None:
             try:
                 db.recovery_campaigns.insert_one(campaign_doc)
+                # Update candidate status in recovery_candidates collection
+                if c_id:
+                    db.recovery_candidates.update_one(
+                        {"$or": [{"candidate_id": c_id}, {"_id": target.get("mongo_id")}]},
+                        {"$set": {
+                            "status": overall_status,
+                            "campaign_id": campaign_id,
+                            "updated_at": now_iso,
+                            "dispatched_at": now_iso
+                        }}
+                    )
             except Exception as err:
-                logger.warning(f"[RecoveryLambda] Failed to insert campaign to Mongo: {err}")
+                logger.warning(f"[RecoveryLambda] Failed to insert campaign/update candidate in Mongo: {err}")
 
     execution_result = {
         "status": "SUCCESS",
@@ -270,7 +361,9 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
         "sms_sent": sms_sent,
         "campaigns_created": campaigns_created,
         "deduped_count": deduped_count,
-        "timestamp": now_dt.isoformat()
+        "skipped_expired": skipped_expired_count,
+        "failed_count": failed_count,
+        "timestamp": now_iso
     }
 
     # Emit EventBridge event

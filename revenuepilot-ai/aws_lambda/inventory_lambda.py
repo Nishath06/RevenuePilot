@@ -33,7 +33,7 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
     """
     AWS Lambda entry point for Inventory Processing & Stock Intelligence.
     Reads products from MongoDB Atlas or payload, calculates stock velocity,
-    creates recommendations, and dispatches EventBridge alert events.
+    forecasts stockout dates, performs bulk recommendation updates, and dispatches EventBridge alert events.
     """
     db = get_database()
     merchant_id = event.get("merchant_id", "merch_default") if isinstance(event, dict) else "merch_default"
@@ -49,11 +49,14 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
         products = items_input
     elif db is not None:
         try:
-            # Ignore deleted products
-            cursor = db.products.find(
-                {"$or": [{"is_deleted": {"$ne": True}}, {"is_deleted": {"$exists": False}}]},
-                {"_id": 0}
-            ).limit(500)
+            # Query products with merchant isolation and non-deleted filter
+            prod_query: Dict[str, Any] = {
+                "$or": [{"is_deleted": {"$ne": True}}, {"is_deleted": {"$exists": False}}]
+            }
+            if merchant_id and merchant_id != "all":
+                prod_query["merchant_id"] = merchant_id
+
+            cursor = db.products.find(prod_query, {"_id": 0}).limit(500)
             products = list(cursor)
         except Exception as err:
             logger.warning(f"[InventoryLambda] PyMongo fetch failed: {err}")
@@ -63,8 +66,10 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
     out_of_stock_items: List[Dict[str, Any]] = []
     recommendations: List[Dict[str, Any]] = []
     processed_count = 0
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
 
-    # 2. Process products & calculate metrics
+    # 2. Process products & calculate stock velocity and forecast stockout date
     for p in products:
         if not isinstance(p, dict):
             continue
@@ -79,6 +84,10 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
         price = float(p.get("price") or 0.0)
         velocity = calculate_stock_velocity(p)
         days_until_stockout = round(stock / velocity, 1) if velocity > 0 else 999.0
+        
+        # Forecast estimated stockout date
+        estimated_stockout_dt = now_dt + timedelta(days=min(365, days_until_stockout))
+        estimated_stockout_date = estimated_stockout_dt.strftime("%Y-%m-%d")
 
         item_detail = {
             "sku": sku,
@@ -88,6 +97,8 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
             "price": price,
             "daily_velocity": velocity,
             "days_until_stockout": days_until_stockout,
+            "estimated_stockout_date": estimated_stockout_date,
+            "merchant_id": p.get("merchant_id", merchant_id)
         }
 
         if stock == 0:
@@ -97,10 +108,17 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
                 "recommendation_id": f"rec_out_{sku}",
                 "type": "URGENT_RESTOCK",
                 "product_id": p.get("product_id", sku),
+                "sku": sku,
+                "merchant_id": p.get("merchant_id", merchant_id),
                 "title": f"Urgent Reorder Required: {name}",
                 "description": f"Product {name} ({sku}) is OUT OF STOCK. Estimated lost revenue per day: ₹{round(velocity * price, 2)}",
                 "suggested_reorder_qty": max(50, int(velocity * 30)),
-                "priority": "CRITICAL"
+                "priority": "CRITICAL",
+                "days_until_stockout": 0.0,
+                "estimated_stockout_date": now_dt.strftime("%Y-%m-%d"),
+                "status": "OPEN",
+                "created_at": now_iso,
+                "updated_at": now_iso
             })
         elif stock <= low_stock_threshold:
             item_detail["status"] = "LOW_STOCK"
@@ -109,19 +127,23 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
                 "recommendation_id": f"rec_low_{sku}",
                 "type": "SAFETY_RESTOCK",
                 "product_id": p.get("product_id", sku),
+                "sku": sku,
+                "merchant_id": p.get("merchant_id", merchant_id),
                 "title": f"Low Stock Warning: {name}",
                 "description": f"Stock ({stock}) below threshold ({low_stock_threshold}). Days until stockout: {days_until_stockout}",
                 "suggested_reorder_qty": max(25, int(velocity * 20)),
-                "priority": "HIGH"
+                "priority": "HIGH",
+                "days_until_stockout": days_until_stockout,
+                "estimated_stockout_date": estimated_stockout_date,
+                "status": "OPEN",
+                "created_at": now_iso,
+                "updated_at": now_iso
             })
 
-    # 3. Save recommendations to MongoDB if database available
+    # 3. Save recommendations to MongoDB using bulk writes or upsert updates
     if db is not None and recommendations:
         try:
-            now_iso = datetime.now(timezone.utc).isoformat()
             for rec in recommendations:
-                rec["merchant_id"] = merchant_id
-                rec["updated_at"] = now_iso
                 db.recommendations.update_one(
                     {"recommendation_id": rec["recommendation_id"]},
                     {"$set": rec},
@@ -144,7 +166,7 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
         "low_stock_list": low_stock_items[:10],
         "out_of_stock_list": out_of_stock_items[:10],
         "recommendations_generated": len(recommendations),
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": now_iso
     }
 
     # 5. Emit EventBridge event if low/out of stock anomalies found

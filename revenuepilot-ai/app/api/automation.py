@@ -375,10 +375,34 @@ async def download_report_file(filename: str):
     content = report.get("content", "")
     fmt = str(report.get("format", "csv")).lower()
 
+    if fmt == "pdf" or filename.endswith(".pdf"):
+        pdf_path = "/tmp/revenuepilot_inventory_report.pdf"
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                content_bytes = f.read()
+        else:
+            from aws_lambda.reports_lambda import generate_pdf_reportlab
+            pdf_res = generate_pdf_reportlab(
+                report_type=report.get("report_type", "revenue"),
+                date_range=report.get("date_range", "7d"),
+                metrics={},
+                orders=[],
+                output_path=pdf_path
+            )
+            content_bytes = pdf_res[0] if isinstance(pdf_res, tuple) else pdf_res
+
+        return Response(
+            content=content_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+
     media_map = {
         "csv": "text/csv",
         "json": "application/json",
-        "pdf": "application/pdf",
         "txt": "text/plain",
     }
     media_type = media_map.get(fmt, "text/plain")

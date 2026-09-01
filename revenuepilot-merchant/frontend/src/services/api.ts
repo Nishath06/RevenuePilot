@@ -4,7 +4,7 @@ const STORE_API = import.meta.env.VITE_STORE_API_URL || 'http://localhost:8000/a
 const AI_API = import.meta.env.VITE_AI_API_URL || 'http://localhost:8001';
 
 function createClient(baseURL: string): AxiosInstance {
-  const client = axios.create({ baseURL, timeout: 60000 });
+  const client = axios.create({ baseURL, timeout: 10000 });
 
   client.interceptors.request.use((config) => {
     const token = localStorage.getItem('merchant_token');

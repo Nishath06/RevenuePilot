@@ -10,7 +10,7 @@ class RateLimitMiddleware:
         self.request_counts = defaultdict(list)
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] != "http" or scope.get("method") == "OPTIONS":
             await self.app(scope, receive, send)
             return
 

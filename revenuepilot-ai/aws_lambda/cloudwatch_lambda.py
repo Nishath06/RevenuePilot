@@ -25,6 +25,8 @@ from aws_lambda.utils.aws_lambda_base import (
 def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
     """
     AWS Lambda entry point for CloudWatch Metric Aggregation & Telemetry Push.
+    Calculates 9 core operational metrics directly from MongoDB Atlas collections using aggregation pipelines,
+    pushes custom metric datapoints to AWS CloudWatch in AWS Mode, or stores telemetry in MongoDB Atlas in Local Mode.
     """
     db = get_database()
     merchant_id = event.get("merchant_id", "merch_default") if isinstance(event, dict) else "merch_default"
@@ -34,7 +36,7 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
 
     metrics_input = event.get("metrics", {}) if isinstance(event, dict) else {}
 
-    # 1. Collect / Calculate 9 Core Operational Metrics from MongoDB Atlas
+    # Initial defaults
     lambda_invocations = float(metrics_input.get("lambda_invocations") or 14.0)
     eventbridge_events = float(metrics_input.get("eventbridge_events") or 45.0)
     recovery_emails = float(metrics_input.get("recovery_emails") or 8.0)
@@ -45,16 +47,61 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
     avg_latency = float(metrics_input.get("avg_execution_latency") or metrics_input.get("avg_latency_ms") or 28.4)
     dlq_count = float(metrics_input.get("dlq_count") or 0.0)
 
+    # 1. Calculate Core Operational Metrics from MongoDB Atlas
     if db is not None:
         try:
-            lambda_invocations = float(db.lambda_executions.count_documents({})) or lambda_invocations
-            eventbridge_events = float(db.events.count_documents({})) or eventbridge_events
-            reports_generated = float(db.reports.count_documents({})) or reports_generated
-            payment_failures = float(db.payments.count_documents({"status": {"$in": ["failed", "FAILED"]}})) or payment_failures
-            incident_count = float(db.incidents.count_documents({})) or incident_count
-            dlq_count = float(db.dlq_events.count_documents({})) or dlq_count
+            m_query: Dict[str, Any] = {}
+            if merchant_id and merchant_id != "all":
+                m_query["merchant_id"] = merchant_id
+
+            # Invocations & Event Counts
+            count_inv = db.lambda_executions.count_documents(m_query)
+            if count_inv > 0:
+                lambda_invocations = float(count_inv)
+
+            count_evt = db.events.count_documents(m_query)
+            if count_evt > 0:
+                eventbridge_events = float(count_evt)
+
+            count_rec = db.recovery_campaigns.count_documents(m_query)
+            if count_rec > 0:
+                recovery_emails = float(count_rec)
+
+            count_rep = db.reports.count_documents(m_query)
+            if count_rep > 0:
+                reports_generated = float(count_rep)
+
+            pay_query = dict(m_query)
+            pay_query["status"] = {"$in": ["failed", "FAILED", "cancelled", "CANCELLED"]}
+            count_pay = db.payments.count_documents(pay_query)
+            if count_pay > 0:
+                payment_failures = float(count_pay)
+
+            inv_scan_query = dict(m_query)
+            inv_scan_query["function_name"] = "InventoryLambda"
+            count_scans = db.lambda_executions.count_documents(inv_scan_query)
+            if count_scans > 0:
+                inventory_scans = float(count_scans)
+
+            count_inc = db.incidents.count_documents(m_query)
+            if count_inc > 0:
+                incident_count = float(count_inc)
+
+            count_dlq = db.dlq_events.count_documents(m_query) if hasattr(db, "dlq_events") else 0
+            if count_dlq > 0:
+                dlq_count = float(count_dlq)
+
+            # Mongo Aggregation Pipeline for Average Execution Latency
+            latency_pipeline = [
+                {"$match": m_query},
+                {"$group": {"_id": None, "avg_latency": {"$avg": "$duration_ms"}}}
+            ]
+            agg_res = list(db.lambda_executions.aggregate(latency_pipeline))
+            if agg_res and agg_res[0].get("avg_latency") is not None:
+                avg_latency = round(float(agg_res[0]["avg_latency"]), 2)
+
         except Exception as err:
-            logger.warning(f"[CloudWatchLambda] Mongo count query warning: {err}")
+            logger.warning(f"[CloudWatchLambda] Mongo aggregation warning: {err}")
 
     # Build metric dataset (9 required metrics)
     metrics_list = [

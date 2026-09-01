@@ -26,10 +26,27 @@ export const ReportsCenter: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [generatingType, setGeneratingType] = useState<string | null>(null);
 
-  const triggerBrowserDownload = (content: string, filename: string, format: string) => {
+  const triggerBrowserDownload = (content: string, filename: string, format: string, encoding?: string) => {
     const fmt = format.toLowerCase();
-    const mimeType = fmt === 'json' ? 'application/json' : (fmt === 'csv' ? 'text/csv' : (fmt === 'pdf' ? 'application/pdf' : 'text/plain'));
-    const blob = new Blob([content], { type: mimeType });
+    const mimeType = fmt === 'json' ? 'application/json'
+      : fmt === 'pdf' ? 'application/pdf'
+      : fmt === 'csv' ? 'text/csv'
+      : 'text/plain';
+
+    let blob: Blob;
+
+    if (fmt === 'pdf' || encoding === 'base64') {
+      // Decode base64 → binary bytes → Blob (required for valid PDF)
+      const binaryStr = atob(content);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      blob = new Blob([bytes], { type: mimeType });
+    } else {
+      blob = new Blob([content], { type: mimeType });
+    }
+
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -72,7 +89,7 @@ export const ReportsCenter: React.FC = () => {
       setReportHistory((prev) => [rep, ...prev.filter((r) => r.report_id !== rep.report_id)]);
 
       if (rep.content && rep.filename) {
-        triggerBrowserDownload(rep.content, rep.filename, format);
+        triggerBrowserDownload(rep.content, rep.filename, format, rep.content_encoding);
       }
     } catch (err: any) {
       console.error('Failed to generate report', err);
@@ -85,7 +102,7 @@ export const ReportsCenter: React.FC = () => {
 
   const handleDirectDownload = (rep: any) => {
     if (rep.content && rep.filename) {
-      triggerBrowserDownload(rep.content, rep.filename, rep.format || 'csv');
+      triggerBrowserDownload(rep.content, rep.filename, rep.format || 'csv', rep.content_encoding);
     } else if (rep.download_url && rep.download_url.startsWith('http')) {
       window.open(rep.download_url, '_blank');
     } else if (rep.filename) {

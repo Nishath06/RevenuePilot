@@ -16,6 +16,8 @@ def generate_signed_url(
     object_name: str,
     bucket_name: Optional[str] = None,
     expiration: int = 3600,
+    content_type: Optional[str] = None,
+    content_disposition: Optional[str] = None,
 ) -> str:
     """
     Requirement 6 — Generate presigned S3 download URL.
@@ -27,9 +29,15 @@ def generate_signed_url(
         return f"/automation/reports/download/{object_name}"
 
     try:
+        params: Dict[str, Any] = {"Bucket": bucket, "Key": object_name}
+        if content_type:
+            params["ResponseContentType"] = content_type
+        if content_disposition:
+            params["ResponseContentDisposition"] = content_disposition
+
         url = aws_client.s3_client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": bucket, "Key": object_name},
+            Params=params,
             ExpiresIn=expiration,
         )
         return url
@@ -43,6 +51,7 @@ def upload_report(
     object_name: str,
     bucket_name: Optional[str] = None,
     content_type: str = "text/csv",
+    content_disposition: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Requirement 6 — Upload operational report file to Amazon S3.
@@ -69,15 +78,25 @@ def upload_report(
 
     try:
         body = file_content.encode("utf-8") if isinstance(file_content, str) else file_content
-        aws_client.s3_client.put_object(
-            Bucket=bucket,
-            Key=object_name,
-            Body=body,
-            ContentType=content_type,
-        )
+        put_kwargs = {
+            "Bucket": bucket,
+            "Key": object_name,
+            "Body": body,
+            "ContentType": content_type,
+        }
+        disp = content_disposition or ("inline" if content_type == "application/pdf" else None)
+        if disp:
+            put_kwargs["ContentDisposition"] = disp
+
+        aws_client.s3_client.put_object(**put_kwargs)
 
         s3_url = f"https://{bucket}.s3.{aws_client.region}.amazonaws.com/{object_name}"
-        signed_url = generate_signed_url(object_name=object_name, bucket_name=bucket)
+        signed_url = generate_signed_url(
+            object_name=object_name,
+            bucket_name=bucket,
+            content_type=content_type,
+            content_disposition=disp
+        )
 
         logger.info("Report successfully uploaded to AWS S3", s3_url=s3_url)
         return {

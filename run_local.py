@@ -3,10 +3,10 @@
 RevenuePilot Monorepo Local Orchestrator
 ----------------------------------------
 Launches all 4 microservices locally:
-  1. Store Backend (FastAPI - Port 8000)
-  2. AI Analytics Service (FastAPI - Port 8001)
-  3. Store Customer Frontend (Vite/React - Port 3000)
-  4. Merchant Operations Center (Vite/React - Port 3001)
+  1. Store Backend     (FastAPI  - Port 8000)
+  2. AI Analytics      (FastAPI  - Port 8001)
+  3. Store Frontend    (Vite     - Port 3000)
+  4. Merchant Dashboard(Vite     - Port 3001)
 
 Usage:
     python run_local.py
@@ -17,61 +17,126 @@ import sys
 import time
 import signal
 import subprocess
+import threading
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
 
+# ── Service Definitions ──────────────────────────────────────────────────────
+# NOTE: npm services use `npm run dev` only — port is already baked into each
+# package.json dev script.  Passing --port again causes duplicates.
 SERVICES = [
     {
-        "name": "RevenuePilot Store Backend",
+        "name": "Store Backend",
         "port": 8000,
         "type": "fastapi",
         "cwd": os.path.join(ROOT_DIR, "revenuepilot-store", "backend"),
         "venv": os.path.join(ROOT_DIR, "revenuepilot-store", "backend", "venv"),
-        "args": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--host", "127.0.0.1", "--reload"],
+        "args": ["-m", "uvicorn", "app.main:app",
+                 "--port", "8000", "--host", "127.0.0.1", "--reload"],
     },
     {
-        "name": "RevenuePilot AI Service",
+        "name": "AI Service",
         "port": 8001,
         "type": "fastapi",
         "cwd": os.path.join(ROOT_DIR, "revenuepilot-ai"),
         "venv": os.path.join(ROOT_DIR, "revenuepilot-ai", "venv"),
-        "args": ["-m", "uvicorn", "app.main:app", "--port", "8001", "--host", "127.0.0.1", "--reload"],
+        "args": ["-m", "uvicorn", "app.main:app",
+                 "--port", "8001", "--host", "127.0.0.1", "--reload"],
     },
     {
-        "name": "RevenuePilot Store Frontend",
+        "name": "Store Frontend",
         "port": 3000,
         "type": "npm",
         "cwd": os.path.join(ROOT_DIR, "revenuepilot-store", "frontend"),
-        "cmd": ["npm", "run", "dev", "--", "--port", "3000"],
+        # store package.json dev = "vite" (no port), so we pass --port here
+        "npm_args": ["run", "dev", "--", "--port", "3000"],
     },
     {
-        "name": "RevenuePilot Merchant Dashboard",
+        "name": "Merchant Dashboard",
         "port": 3001,
         "type": "npm",
         "cwd": os.path.join(ROOT_DIR, "revenuepilot-merchant", "frontend"),
-        "cmd": ["npm", "run", "dev", "--", "--port", "3001"],
+        # merchant package.json dev = "vite --port 3001" — port already set!
+        "npm_args": ["run", "dev"],
     },
 ]
 
-running_processes = []
+running_processes = []   # list of {"name", "port", "proc", "stderr_lines"}
 
 
-def resolve_python(venv_dir):
-    """Resolve virtualenv python executable if available, else system python."""
+# ── Port Helpers ─────────────────────────────────────────────────────────────
+
+def _kill_pid_tree(pid: str) -> None:
+    """Kill a PID and all its children (Windows)."""
+    subprocess.call(
+        ["taskkill", "/F", "/T", "/PID", pid],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def free_port(port: int) -> None:
+    """Kill every process listening on *port* (including child workers)."""
     if sys.platform == "win32":
-        venv_python = os.path.join(venv_dir, "Scripts", "python.exe")
+        try:
+            out = subprocess.check_output(
+                ["netstat", "-ano"], stderr=subprocess.DEVNULL, text=True
+            )
+            seen = set()
+            for line in out.splitlines():
+                if f":{port} " in line and ("LISTENING" in line or "ESTABLISHED" in line):
+                    parts = line.strip().split()
+                    pid = parts[-1]
+                    if pid.isdigit() and pid not in seen:
+                        seen.add(pid)
+                        _kill_pid_tree(pid)
+                        print(f"   ⚡ Freed port {port} — killed PID {pid} (tree)")
+        except Exception as exc:
+            print(f"   ! Could not free port {port}: {exc}")
     else:
-        venv_python = os.path.join(venv_dir, "bin", "python")
+        try:
+            raw = subprocess.check_output(
+                ["lsof", "-ti", f":{port}"], stderr=subprocess.DEVNULL, text=True
+            ).strip()
+            for pid in raw.splitlines():
+                subprocess.call(
+                    ["kill", "-9", pid],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                print(f"   ⚡ Freed port {port} — killed PID {pid}")
+        except Exception:
+            pass
 
-    if os.path.isfile(venv_python):
-        return venv_python
-    return sys.executable
+
+# ── Process Helpers ───────────────────────────────────────────────────────────
+
+def resolve_python(venv_dir: str) -> str:
+    """Return the venv python if it exists, else fall back to sys.executable."""
+    candidate = os.path.join(
+        venv_dir,
+        "Scripts" if sys.platform == "win32" else "bin",
+        "python.exe" if sys.platform == "win32" else "python",
+    )
+    return candidate if os.path.isfile(candidate) else sys.executable
 
 
-def terminate_all(signum=None, frame=None):
+def _stream_stderr(proc, lines_buf: list) -> None:
+    """Background thread: read stderr and buffer lines (up to 40)."""
+    try:
+        for raw in proc.stderr:
+            line = raw.rstrip()
+            if line:
+                lines_buf.append(line)
+                if len(lines_buf) > 40:
+                    lines_buf.pop(0)
+    except Exception:
+        pass
+
+
+def terminate_all(signum=None, frame=None) -> None:
     """Gracefully terminate all spawned background processes."""
     print("\n🛑 Stopping all RevenuePilot microservices...")
     for item in running_processes:
@@ -79,91 +144,125 @@ def terminate_all(signum=None, frame=None):
         name = item["name"]
         try:
             if sys.platform == "win32":
-                subprocess.call(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                _kill_pid_tree(str(proc.pid))
             else:
                 proc.terminate()
             print(f"   ✓ Stopped {name} (PID {proc.pid})")
-        except Exception as e:
-            print(f"   ! Error stopping {name}: {e}")
-    print("✨ All services stopped cleanly.\n")
+        except Exception as exc:
+            print(f"   ! Error stopping {name}: {exc}")
+    print("✨ All services stopped.\n")
     sys.exit(0)
 
 
-def start_service(svc):
-    """Start a single service process."""
+# ── Service Launcher ──────────────────────────────────────────────────────────
+
+def start_service(svc: dict) -> None:
     name = svc["name"]
-    cwd = svc["cwd"]
+    cwd  = svc["cwd"]
     port = svc["port"]
 
+    # 1. Clear the port first (kill full process tree)
+    free_port(port)
+    time.sleep(2)  # Give OS time to release the socket
+
+    # 2. Build the command
     if svc["type"] == "fastapi":
-        py_exe = resolve_python(svc["venv"])
-        cmd = [py_exe] + svc["args"]
+        py = resolve_python(svc["venv"])
+        cmd = [py] + svc["args"]
     else:
-        # npm command setup
-        cmd = svc["cmd"]
-        if sys.platform == "win32":
-            cmd[0] = "npm.cmd"
+        npm = "npm.cmd" if sys.platform == "win32" else "npm"
+        cmd = [npm] + svc["npm_args"]
 
-    print(f"🚀 Starting {name} on port {port}...")
-    print(f"   Directory: {cwd}")
-    print(f"   Command:   {' '.join(cmd)}")
+    print(f"🚀 Starting {name} → http://localhost:{port}")
+    print(f"   Dir : {cwd}")
+    print(f"   Cmd : {' '.join(cmd)}")
 
+    # 3. Build environment
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    if svc["type"] == "fastapi" and "venv" in svc:
+        env["VIRTUAL_ENV"] = svc["venv"]
+        scripts = os.path.join(svc["venv"], "Scripts" if sys.platform == "win32" else "bin")
+        env["PATH"] = scripts + os.pathsep + env.get("PATH", "")
+
+    # 4. Launch — capture stderr for crash diagnostics, inherit stdout
     try:
-        env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
         proc = subprocess.Popen(
             cmd,
             cwd=cwd,
             env=env,
-            stdout=None,  # Inherit terminal output or let logs print live
-            stderr=None,
+            stdout=None,           # live output to terminal
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
-        running_processes.append({"name": name, "port": port, "proc": proc})
-        print(f"   ✓ {name} initialized (PID {proc.pid})\n")
-    except Exception as e:
-        print(f"   ❌ Failed to start {name}: {e}\n")
+        stderr_lines: list = []
+        t = threading.Thread(target=_stream_stderr, args=(proc, stderr_lines), daemon=True)
+        t.start()
+
+        running_processes.append({
+            "name": name,
+            "port": port,
+            "proc": proc,
+            "stderr_lines": stderr_lines,
+        })
+        print(f"   ✓ {name} started (PID {proc.pid})\n")
+    except Exception as exc:
+        print(f"   ❌ Failed to start {name}: {exc}\n")
 
 
-def print_banner():
-    """Print launching banner and endpoints summary."""
-    banner = """
+# ── Banner ────────────────────────────────────────────────────────────────────
+
+def print_banner() -> None:
+    print("""
 ====================================================================
-           🚀 RevenuePilot SaaS Platform Orchestrator 🚀
+         🚀  RevenuePilot SaaS Platform Orchestrator  🚀
 ====================================================================
-  1. Store Frontend (Customer):     http://localhost:3000
-  2. Merchant Operations Center:    http://localhost:3001
-  3. Store Backend API:             http://localhost:8000/docs
-  4. AI Intelligence Engine API:    http://localhost:8001/docs
+  Store Frontend (Customer):     http://localhost:3000
+  Merchant Operations Center:    http://localhost:3001
+  Store Backend API:             http://localhost:8000/api/v1/docs
+  AI Intelligence Engine API:    http://localhost:8001/docs
 ====================================================================
   Press Ctrl+C to gracefully stop all services.
 ====================================================================
-    """
-    print(banner)
+""")
 
 
-def main():
+# ── Main Loop ─────────────────────────────────────────────────────────────────
+
+def main() -> None:
     signal.signal(signal.SIGINT, terminate_all)
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, terminate_all)
 
     print_banner()
 
-    # Launch all 4 services
     for svc in SERVICES:
         start_service(svc)
 
-    print("✅ All 4 services are running in background.")
-    print("   Monitoring active processes... (Press Ctrl+C to exit)\n")
+    print("✅ All services launched.  Monitoring... (Ctrl+C to stop)\n")
 
-    # Monitor processes
+    dead_names: set = set()
+
     while True:
         try:
-            time.sleep(2)
-            for item in running_processes:
-                proc = item["proc"]
-                name = item["name"]
+            time.sleep(3)
+            for item in list(running_processes):
+                proc  = item["proc"]
+                name  = item["name"]
+                lines = item.get("stderr_lines", [])
+
                 if proc.poll() is not None:
-                    print(f"⚠️ Warning: {name} (PID {proc.pid}) exited unexpectedly with code {proc.returncode}")
+                    if name not in dead_names:
+                        dead_names.add(name)
+                        print(f"\n❌ {name} (PID {proc.pid}) crashed "
+                              f"(exit code {proc.returncode})")
+                        if lines:
+                            print(f"   Last stderr output:")
+                            for ln in lines[-15:]:
+                                print(f"     {ln}")
+                        print()
         except KeyboardInterrupt:
             terminate_all()
 

@@ -183,3 +183,47 @@ def test_cloudwatch_lambda():
 
     assert body["status"] == "SUCCESS"
     assert body["metrics_pushed"] == 9
+
+
+def test_incident_cooldown_deduplication():
+    """Test IncidentLambda cooldown deduplication logic."""
+    unique_type = f"TEST_COOLDOWN_{uuid.uuid4().hex[:6]}"
+    payload = {
+        "merchant_id": "merch_unit_test",
+        "incident_type": unique_type,
+        "title": "Cooldown Test Incident",
+        "severity": "HIGH",
+        "cooldown_minutes": 15
+    }
+
+    # First trigger creates incident
+    res1 = incident_handler(payload, DummyContext())
+    assert res1["statusCode"] == 200
+    body1 = json.loads(res1["body"]) if isinstance(res1["body"], str) else res1["body"]
+    assert body1["status"] == "SUCCESS"
+    assert body1["sns_alert_published"] is True
+
+    # Immediate second trigger within 15 min cooldown suppresses duplicate
+    res2 = incident_handler(payload, DummyContext())
+    assert res2["statusCode"] == 200
+    body2 = json.loads(res2["body"]) if isinstance(res2["body"], str) else res2["body"]
+    assert body2["status"] == "SUCCESS"
+    assert body2.get("duplicate_suppressed") is True
+    assert body2["sns_alert_published"] is False
+
+
+@pytest.mark.asyncio
+async def test_pdf_report_service_generation():
+    """Test reports_service.generate_report for PDF format to ensure JSON safety and valid binary header."""
+    from app.db.mongodb import connect_to_mongodb
+    from app.services.reports_service import reports_service
+    await connect_to_mongodb()
+    rep = await reports_service.generate_report(report_type="revenue", format_type="pdf", date_range="7d")
+    assert rep["status"] == "COMPLETED"
+    assert rep["format"] == "pdf"
+    assert isinstance(rep["content"], str)
+    import base64
+    decoded = base64.b64decode(rep["content"])
+    assert decoded[:5] == b"%PDF-"
+
+

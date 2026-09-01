@@ -19,7 +19,11 @@ export const LoginPage: React.FC = () => {
       await login(email, password);
       navigate('/');
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Login failed. Check credentials.');
+      if (err?.code === 'ECONNABORTED' || err?.code === 'ERR_NETWORK' || !err?.response) {
+        setError('Cannot reach the server. Please make sure the backend is running.');
+      } else {
+        setError(err?.response?.data?.detail || err?.message || 'Login failed. Check credentials.');
+      }
     }
   };
 

@@ -7,6 +7,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isCheckingAuth: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
@@ -19,6 +20,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      isCheckingAuth: true,
 
       login: async (email, password) => {
         set({ isLoading: true });
@@ -43,19 +45,25 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
+        set({ isCheckingAuth: true });
         const token = localStorage.getItem('merchant_token');
-        if (!token) { set({ isAuthenticated: false }); return; }
+        if (!token) {
+          set({ isAuthenticated: false, isCheckingAuth: false });
+          return;
+        }
         try {
           const res = await authAPI.me();
           const user = res.data;
           const role = user.role || 'merchant';
           if (role !== 'merchant' && role !== 'admin') {
             get().logout();
+            set({ isCheckingAuth: false });
             return;
           }
-          set({ user: { ...user, role }, token, isAuthenticated: true });
+          set({ user: { ...user, role }, token, isAuthenticated: true, isCheckingAuth: false });
         } catch {
           get().logout();
+          set({ isCheckingAuth: false });
         }
       },
     }),

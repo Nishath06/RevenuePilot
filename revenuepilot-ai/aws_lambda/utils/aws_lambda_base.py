@@ -164,6 +164,15 @@ def get_boto3_client(service_name: str) -> Any:
 
 # ─── STRUCTURED LOGGING & AUDITING HELPERS ───────────────────────────────────
 
+def get_merchant_filter(merchant_id: Optional[str]) -> Dict[str, Any]:
+    """
+    Returns MongoDB query filter for merchant isolation.
+    """
+    if not merchant_id or merchant_id == "all":
+        return {}
+    return {"merchant_id": merchant_id}
+
+
 def log_json(
     lambda_name: str,
     trace_id: str,
@@ -197,7 +206,8 @@ def save_execution_log(
     duration_ms: float,
     status: str,
     payload: Dict[str, Any],
-    response: Dict[str, Any]
+    response: Dict[str, Any],
+    started_at_iso: Optional[str] = None
 ) -> None:
     """
     Persists execution summary into MongoDB `lambda_executions` collection.
@@ -205,21 +215,28 @@ def save_execution_log(
     if db is None:
         return
     try:
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
+        completed_at = now_dt.isoformat()
+        started_at = started_at_iso or (now_dt - timedelta(milliseconds=duration_ms)).isoformat()
+        
         doc = {
             "execution_id": exec_id,
             "trace_id": trace_id,
+            "lambda_name": function_name,
             "function_name": function_name,
             "merchant_id": merchant_id,
             "duration_ms": duration_ms,
             "status": status,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "aws_mode": "aws" if not config.is_local_mode else "local",
             "payload": serialize_bson(payload),
             "response": serialize_bson(response),
             "aws_request_id": exec_id,
             "execution_mode": "AWS Boto3 Lambda" if not config.is_local_mode else "Local Simulation Mode",
-            "execution_time": now_iso,
-            "timestamp": now_iso,
-            "created_at": now_iso
+            "execution_time": completed_at,
+            "timestamp": completed_at,
+            "created_at": completed_at
         }
         db.lambda_executions.insert_one(doc)
     except Exception as err:
@@ -280,7 +297,13 @@ def publish_eventbridge_event(
     evt_id = f"evt_{uuid.uuid4().hex[:10]}"
     t_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
     now_iso = datetime.now(timezone.utc).isoformat()
+    
+    # Ensure detail has merchant_id, trace_id, status
     clean_detail = serialize_bson(detail)
+    if isinstance(clean_detail, dict):
+        clean_detail.setdefault("merchant_id", merchant_id)
+        clean_detail.setdefault("trace_id", t_id)
+        clean_detail.setdefault("status", "SUCCESS")
 
     event_record = {
         "event_id": evt_id,
@@ -338,6 +361,9 @@ def handle_lambda_exceptions(lambda_name: str):
         @wraps(func)
         def wrapper(event: Dict[str, Any], context: Any = None):
             start_time = time.perf_counter()
+            started_at_dt = datetime.now(timezone.utc)
+            started_at_iso = started_at_dt.isoformat()
+            
             exec_id = f"lam_{uuid.uuid4().hex[:10]}"
             trace_id = event.get("trace_id") if isinstance(event, dict) else None
             if not trace_id and context and hasattr(context, "aws_request_id"):
@@ -368,7 +394,7 @@ def handle_lambda_exceptions(lambda_name: str):
                     body_dict = result
 
                 log_json(lambda_name, trace_id, merchant_id, "SUCCESS", elapsed_ms, body_dict)
-                save_execution_log(db, exec_id, trace_id, lambda_name, merchant_id, elapsed_ms, "SUCCESS", event, body_dict)
+                save_execution_log(db, exec_id, trace_id, lambda_name, merchant_id, elapsed_ms, "SUCCESS", event, body_dict, started_at_iso)
                 save_audit_log(db, trace_id, lambda_name, merchant_id, f"INVOKE_{lambda_name.upper()}", event, body_dict, "SUCCESS", elapsed_ms)
 
                 return result
@@ -388,7 +414,7 @@ def handle_lambda_exceptions(lambda_name: str):
                 }
 
                 log_json(lambda_name, trace_id, merchant_id, "FAILED", elapsed_ms, {"error": err_msg})
-                save_execution_log(db, exec_id, trace_id, lambda_name, merchant_id, elapsed_ms, "FAILED", event, error_response)
+                save_execution_log(db, exec_id, trace_id, lambda_name, merchant_id, elapsed_ms, "FAILED", event, error_response, started_at_iso)
                 save_audit_log(db, trace_id, lambda_name, merchant_id, f"INVOKE_{lambda_name.upper()}", event, error_response, "FAILED", elapsed_ms)
 
                 return {
