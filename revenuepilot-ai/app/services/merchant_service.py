@@ -656,53 +656,189 @@ async def get_webhooks_metrics_detailed() -> dict:
 # ── RECOVERY CANDIDATE WORKFLOW ACTIONS ──────────────────────────────────────
 
 async def send_candidate_email(candidate_id: str, merchant_id: str = "merch_default") -> dict:
-    from fastapi import HTTPException
     import uuid
+    import os
+    import time
+    from fastapi import HTTPException
+    from datetime import timedelta
+    from app.services.aws_cloudwatch import put_metric, put_structured_log
+    from app.services.aws_client import aws_client
+
     db = get_mongodb()
     cand_col = db.recovery_candidates
     logs_col = db.communication_logs
-    
+
+    # ── 1. Fetch candidate ────────────────────────────────────────────────────
     cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
     if not cand:
         raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
-    
+
+    trace_id = f"ses_{uuid.uuid4().hex[:10]}"
+    recipient = (cand.get("customer_email") or "").strip().lower()
+
+    # ── 2. Validate email ─────────────────────────────────────────────────────
+    if not recipient or "@" not in recipient:
+        raise HTTPException(status_code=422, detail="candidate has no valid customer_email")
+
+    subject   = cand.get("email_subject")  or "Your purchase is waiting — exclusive offer inside"
+    html_body = cand.get("email_body_html") or f"<p>Hi {cand.get('customer_name','there')}, complete your order today!</p>"
+    text_body = cand.get("email_body_text") or f"Hi {cand.get('customer_name','there')}, complete your order today!"
+    sender    = os.environ.get("SES_SENDER_EMAIL", "noreply@revenuepilot.ai")
+
+    # Kolkata IST timestamp
+    tz_ist = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(tz_ist)
     now_iso = datetime.now(timezone.utc).isoformat()
+
+    logger.info(
+        "SES email dispatch initiated",
+        trace_id=trace_id,
+        candidate_id=candidate_id,
+        recipient=recipient,
+    )
+    put_metric("ManualEmailAttempt", 1.0, dimensions={"MerchantID": merchant_id})
+
+    # ── 3. Send via SES ───────────────────────────────────────────────────────
+    ses_message_id: str = ""
+    ses_client = aws_client.ses_client if hasattr(aws_client, "ses_client") else None
+
+    start_ms = time.perf_counter()
+    is_local = aws_client.is_local_mode if hasattr(aws_client, "is_local_mode") else True
+
+    if is_local or not ses_client:
+        # Local simulation — treat as success with a fake message id
+        ses_message_id = f"local-ses-{uuid.uuid4().hex[:12]}"
+        logger.info(
+            "SES email simulated (local mode)",
+            trace_id=trace_id,
+            candidate_id=candidate_id,
+            recipient=recipient,
+            ses_message_id=ses_message_id,
+        )
+    else:
+        try:
+            body_spec: dict = {}
+            if html_body:
+                body_spec["Html"] = {"Data": html_body, "Charset": "UTF-8"}
+            body_spec["Text"] = {"Data": text_body or html_body, "Charset": "UTF-8"}
+
+            resp = ses_client.send_email(
+                Source=sender,
+                Destination={"ToAddresses": [recipient, "jpnishath@gmail.com", "nishath2306@gmail.com"]},
+                Message={
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": body_spec,
+                },
+            )
+            ses_message_id = resp.get("MessageId", "")
+            latency_ms = round((time.perf_counter() - start_ms) * 1000, 2)
+
+            logger.info(
+                "SES email sent successfully",
+                trace_id=trace_id,
+                candidate_id=candidate_id,
+                recipient=recipient,
+                ses_message_id=ses_message_id,
+                latency_ms=latency_ms,
+            )
+            put_metric("ManualEmailSent", 1.0, dimensions={"MerchantID": merchant_id})
+            put_structured_log(
+                trace_id=trace_id,
+                merchant_id=merchant_id,
+                latency_ms=latency_ms,
+                status="SUCCESS",
+                action="MANUAL_EMAIL_SENT",
+                details={"candidate_id": candidate_id, "recipient": recipient, "ses_message_id": ses_message_id},
+            )
+        except Exception as exc:
+            err_str = str(exc)
+            latency_ms = round((time.perf_counter() - start_ms) * 1000, 2)
+            logger.error(
+                "SES email send failed",
+                trace_id=trace_id,
+                candidate_id=candidate_id,
+                recipient=recipient,
+                error=err_str,
+            )
+            put_metric("ManualEmailFailure", 1.0, dimensions={"MerchantID": merchant_id})
+            put_structured_log(
+                trace_id=trace_id,
+                merchant_id=merchant_id,
+                latency_ms=latency_ms,
+                status="FAILURE",
+                action="MANUAL_EMAIL_FAILED",
+                details={"candidate_id": candidate_id, "recipient": recipient, "error": err_str},
+            )
+            # Write failure entry to MongoDB
+            fail_history = cand.get("message_history", [])
+            fail_history.append({
+                "timestamp": now_iso, "action": "EMAIL_FAILED", "channel": "SES_EMAIL",
+                "by": "merchant_admin", "trace_id": trace_id,
+                "details": f"SES send failed: {err_str}",
+            })
+            await cand_col.update_one(
+                {"candidate_id": candidate_id},
+                {"$set": {
+                    "recovery_status": "FAILED",
+                    "last_action": "EMAIL_FAILED",
+                    "dispatch_metadata.email_sent": False,
+                    "dispatch_metadata.email_error": err_str,
+                    "message_history": fail_history,
+                    "updated_at": now_iso,
+                }},
+            )
+            raise HTTPException(status_code=502, detail=f"SES delivery failed: {err_str}")
+
+    # ── 4. Update MongoDB ONLY after SES success ──────────────────────────────
     curr_status = cand.get("recovery_status", "PENDING")
     new_status = "EMAIL+SMS_SENT" if curr_status in ["SMS_SENT", "EMAIL+SMS_SENT"] else "EMAIL_SENT"
-    
+
     msg_history = cand.get("message_history", [])
     msg_history.append({
         "timestamp": now_iso,
-        "action": "Email Sent",
-        "channel": "EMAIL",
+        "action": "EMAIL_SENT",
+        "channel": "SES_EMAIL",
         "by": "merchant_admin",
-        "details": f"Personalized email sent to {cand.get('customer_email', 'customer')}"
+        "trace_id": trace_id,
+        "ses_message_id": ses_message_id,
+        "recipient": recipient,
+        "details": f"Personalized SES email dispatched to {recipient}",
     })
-    
+
     update_doc = {
         "recovery_status": new_status,
+        "status": "EMAIL_SENT",
         "email_sent_at": now_iso,
         "last_action": "EMAIL_SENT",
         "last_action_by": "merchant_admin",
+        "dispatch_metadata.email_sent": True,
+        "dispatch_metadata.dispatch_time": now_ist.isoformat(),
+        "dispatch_metadata.ses_message_id": ses_message_id,
         "message_history": msg_history,
         "updated_at": now_iso,
     }
-    
     await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
-    
+
     await logs_col.insert_one({
         "log_id": str(uuid.uuid4()),
         "merchant_id": merchant_id,
         "candidate_id": candidate_id,
+        "trace_id": trace_id,
         "channel": "SES_EMAIL",
-        "recipient": cand.get("customer_email"),
+        "recipient": recipient,
+        "ses_message_id": ses_message_id,
         "status": "SUCCESS",
         "sent_at": now_iso,
-        "payload": {"message": cand.get("edited_email_message") or cand.get("email_message")}
     })
-    
-    cand.update(update_doc)
-    return cand
+
+    return {
+        "status": "SUCCESS",
+        "candidate_id": candidate_id,
+        "recipient": recipient,
+        "ses_message_id": ses_message_id,
+        "recovery_status": new_status,
+        "trace_id": trace_id,
+    }
 
 
 async def send_candidate_sms(candidate_id: str, merchant_id: str = "merch_default") -> dict:

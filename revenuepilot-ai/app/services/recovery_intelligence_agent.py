@@ -45,41 +45,74 @@ IS_LOCAL: bool = getattr(settings, "AWS_MODE", "local").lower() != "cloud"
 
 # ── LLM Integration ───────────────────────────────────────────────────────────
 
+_sem: Optional[asyncio.Semaphore] = None
+
+
+def _get_semaphore() -> asyncio.Semaphore:
+    global _sem
+    if _sem is None:
+        _sem = asyncio.Semaphore(3)
+    return _sem
+
+
 async def _call_llm(prompt: str, trace_id: str) -> Dict[str, Any]:
     """
     Calls the configured LLM provider with the recovery prompt.
-    Falls back to deterministic simulation in LOCAL mode.
-    Retries up to 2 times on malformed JSON.
+    Uses asyncio.Semaphore(3) to limit concurrency to 3 requests max.
+    Retries up to 3 times with exponential backoff (1s, 2s, 4s) on HTTP 429 or API errors.
+    Preserves trace_id in retry logs and continues processing.
+    Falls back to deterministic simulation ONLY after all retries fail.
     """
     if IS_LOCAL or not getattr(settings, "GEMINI_API_KEY", ""):
         return _simulate_llm_response(prompt)
 
-    from app.llm.factory import LLMFactory
-    provider = LLMFactory.get_provider()
+    sem = _get_semaphore()
+    async with sem:
+        from app.llm.factory import LLMFactory
+        provider = LLMFactory.get_provider()
 
-    start = time.perf_counter()
-    for attempt in range(1, 3):
-        try:
-            raw = await provider.generate(
-                messages=[
-                    {"role": "system", "content": "You are a revenue recovery AI. Respond in strict JSON only."},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,
-                max_tokens=1200,
-            )
-            # Strip markdown fences if present
-            clean = re.sub(r"```(?:json)?|```", "", raw).strip()
-            parsed = json.loads(clean)
-            latency_ms = round((time.perf_counter() - start) * 1000, 2)
-            _emit_cloudwatch("AverageLLMLatency", latency_ms)
-            return parsed
-        except Exception as exc:
-            logger.warning("LLM call error — using simulation fallback", attempt=attempt, error=str(exc), trace_id=trace_id)
-            return _simulate_llm_response(prompt)
+        max_retries = 3
+        backoff_delays = [1.0, 2.0, 4.0]
+        start = time.perf_counter()
 
-    logger.warning("LLM failed after retries — using simulation fallback", trace_id=trace_id)
-    return _simulate_llm_response(prompt)
+        for attempt in range(1, max_retries + 1):
+            try:
+                raw = await provider.generate(
+                    messages=[
+                        {"role": "system", "content": "You are a revenue recovery AI. Respond in strict JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=1200,
+                )
+                # Strip markdown fences if present
+                clean = re.sub(r"```(?:json)?|```", "", raw).strip()
+                parsed = json.loads(clean)
+                latency_ms = round((time.perf_counter() - start) * 1000, 2)
+                _emit_cloudwatch("AverageLLMLatency", latency_ms)
+                return parsed
+            except Exception as exc:
+                delay = backoff_delays[attempt - 1] if attempt <= len(backoff_delays) else 4.0
+                logger.warning(
+                    "Gemini API call failed — retrying with exponential backoff",
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    backoff_seconds=delay,
+                    error=str(exc),
+                    trace_id=trace_id,
+                )
+                if attempt < max_retries:
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        "Gemini API call failed after max retries — using simulation fallback",
+                        attempts=max_retries,
+                        error=str(exc),
+                        trace_id=trace_id,
+                    )
+                    return _simulate_llm_response(prompt)
+
+        return _simulate_llm_response(prompt)
 
 
 def _simulate_llm_response(prompt: str) -> Dict[str, Any]:
