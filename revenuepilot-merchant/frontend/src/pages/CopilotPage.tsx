@@ -498,7 +498,7 @@ export const CopilotPage: React.FC = () => {
             const displayMetrics = data?.metrics && Object.keys(data.metrics).length > 0 ? data.metrics : data?.analytics;
             const hasMetrics = displayMetrics && Object.keys(displayMetrics).length > 0;
             const hasRecs = data?.recommendations && data.recommendations.length > 0;
-            const isError = data?.success === false || !!data?.error;
+            const isError = data?.success === false;
             const attr = data?.source_attribution;
             const coord = data?.coordinator_metadata;
             const chart = data?.chart;

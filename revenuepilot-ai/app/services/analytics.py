@@ -5,6 +5,7 @@ No business logic inside routes. No LLM calculations.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from app.core.logging import get_logger
@@ -170,14 +171,22 @@ async def average_order_value() -> float:
 
 
 async def get_revenue_metrics() -> RevenueMetrics:
-    """Aggregate all revenue metrics in a single structured response."""
+    """Aggregate all revenue metrics concurrently using asyncio.gather."""
+    today, yesterday, this_week, this_month, growth, aov = await asyncio.gather(
+        revenue_today(),
+        revenue_yesterday(),
+        revenue_this_week(),
+        revenue_this_month(),
+        growth_percentage(),
+        average_order_value(),
+    )
     return RevenueMetrics(
-        today=await revenue_today(),
-        yesterday=await revenue_yesterday(),
-        this_week=await revenue_this_week(),
-        this_month=await revenue_this_month(),
-        growth_percentage=await growth_percentage(),
-        average_order_value=await average_order_value(),
+        today=today,
+        yesterday=yesterday,
+        this_week=this_week,
+        this_month=this_month,
+        growth_percentage=growth,
+        average_order_value=aov,
     )
 
 
@@ -301,23 +310,31 @@ async def cancelled_orders_this_month() -> int:
 async def get_order_metrics() -> OrderMetrics:
     import time
     t0 = time.monotonic()
-    total = await total_orders()
-    paid = await paid_orders()
-    pending = await pending_orders()
-    failed = await failed_orders()
-    cancelled = await cancelled_orders()
-    today = await orders_today()
-    paid_today = await paid_orders_today()
-    failed_today = await failed_orders_today()
-    cancelled_today = await cancelled_orders_today()
-    this_week = await orders_this_week()
-    this_month = await orders_this_month()
-    paid_this_week = await paid_orders_this_week()
-    failed_this_week = await failed_orders_this_week()
-    cancelled_this_week = await cancelled_orders_this_week()
-    paid_this_month = await paid_orders_this_month()
-    failed_this_month = await failed_orders_this_month()
-    cancelled_this_month = await cancelled_orders_this_month()
+    (
+        total, paid, pending, failed, cancelled,
+        today, paid_today, failed_today, cancelled_today,
+        this_week, this_month,
+        paid_this_week, failed_this_week, cancelled_this_week,
+        paid_this_month, failed_this_month, cancelled_this_month
+    ) = await asyncio.gather(
+        total_orders(),
+        paid_orders(),
+        pending_orders(),
+        failed_orders(),
+        cancelled_orders(),
+        orders_today(),
+        paid_orders_today(),
+        failed_orders_today(),
+        cancelled_orders_today(),
+        orders_this_week(),
+        orders_this_month(),
+        paid_orders_this_week(),
+        failed_orders_this_week(),
+        cancelled_orders_this_week(),
+        paid_orders_this_month(),
+        failed_orders_this_month(),
+        cancelled_orders_this_month(),
+    )
 
     elapsed = round((time.monotonic() - t0) * 1000, 1)
     logger.info("get_order_metrics",

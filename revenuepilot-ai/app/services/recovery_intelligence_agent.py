@@ -74,9 +74,9 @@ async def _call_llm(prompt: str, trace_id: str) -> Dict[str, Any]:
             latency_ms = round((time.perf_counter() - start) * 1000, 2)
             _emit_cloudwatch("AverageLLMLatency", latency_ms)
             return parsed
-        except (json.JSONDecodeError, KeyError) as exc:
-            logger.warning("LLM returned malformed JSON", attempt=attempt, error=str(exc), trace_id=trace_id)
-            await asyncio.sleep(1.0)
+        except Exception as exc:
+            logger.warning("LLM call error — using simulation fallback", attempt=attempt, error=str(exc), trace_id=trace_id)
+            return _simulate_llm_response(prompt)
 
     logger.warning("LLM failed after retries — using simulation fallback", trace_id=trace_id)
     return _simulate_llm_response(prompt)
@@ -180,21 +180,33 @@ class RecoveryIntelligenceAgent:
     async def run(
         self,
         merchant_id: str = "merch_default",
+        period: str = "all",
         trace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         trace_id = trace_id or f"trace_ria_{uuid.uuid4().hex[:10]}"
         start_ts = time.perf_counter()
         db = get_mongodb()
 
-        logger.info("RecoveryIntelligenceAgent starting", merchant_id=merchant_id, trace_id=trace_id)
+        logger.info("RecoveryIntelligenceAgent starting", merchant_id=merchant_id, period=period, trace_id=trace_id)
 
         # ── 1. Fetch eligible customers ─────────────────────────────────────
-        customers = await self._fetch_recovery_candidates(db, merchant_id, trace_id)
+        customers = await self._fetch_recovery_candidates(db, merchant_id, trace_id, period=period)
         _emit_cloudwatch("CustomersAnalyzed", float(len(customers)))
 
         if not customers:
             logger.info("No eligible customers found", merchant_id=merchant_id)
-            return {"status": "no_candidates", "customers_analyzed": 0, "candidates_approved": 0}
+            return {
+                "status": "SUCCESS",
+                "customers_analyzed": 0,
+                "candidates_created": 0,
+                "failed_payments": 0,
+                "cancelled_payments": 0,
+                "abandoned_carts": 0,
+                "recoverable_revenue": 0.0,
+                "scheduled_campaign_time": "Today 6:00 PM IST",
+                "campaign_status": "SCHEDULED",
+                "trace_id": trace_id,
+            }
 
         # ── 2. Process in batches ────────────────────────────────────────────
         approved: List[RecoveryCandidate] = []
@@ -207,31 +219,32 @@ class RecoveryIntelligenceAgent:
                 return_exceptions=True,
             )
             for result in batch_results:
-                if isinstance(result, RecoveryCandidate) and result.status == "SCHEDULED":
+                if isinstance(result, RecoveryCandidate) and result.priority != "IGNORE":
                     approved.append(result)
 
-        # ── 3. Schedule Campaign ─────────────────────────────────────────────
+        # ── 3. Schedule Campaign (Target 6:00 PM IST) ─────────────────────
         campaign_id = f"camp_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-        
-        # Calculate schedule time
-        tz_str = getattr(settings, "RECOVERY_TIMEZONE", "Asia/Kolkata")
-        tz = ZoneInfo(tz_str)
+
+        tz_str = "Asia/Kolkata"
+        try:
+            tz = ZoneInfo(tz_str)
+        except Exception:
+            tz = timezone(timedelta(hours=5, minutes=30))
+
         now_tz = datetime.now(tz)
-        target_hour = int(getattr(settings, "RECOVERY_CAMPAIGN_HOUR", 18))
-        target_minute = int(getattr(settings, "RECOVERY_CAMPAIGN_MINUTE", 0))
-        
-        scheduled_time = now_tz.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+        scheduled_time = now_tz.replace(hour=18, minute=0, second=0, microsecond=0)
+        is_today = True
         if now_tz > scheduled_time:
             scheduled_time = scheduled_time + timedelta(days=1)
-            
-        scheduled_time_iso = scheduled_time.isoformat()
-        
-        for cand in approved:
-            cand.campaign_id = campaign_id
-            cand.scheduled_send_time = scheduled_time_iso
-            cand.timezone = tz_str
+            is_today = False
 
-        # ── 4. Persist approved candidates ──────────────────────────────────
+        scheduled_time_iso = scheduled_time.isoformat()
+        scheduled_display_time = f"{'Today' if is_today else 'Tomorrow'} 6:00 PM IST"
+
+        for cand in approved:
+            cand.scheduled_send_time = scheduled_time_iso
+
+        # ── 4. Persist candidates to MongoDB ──────────────────────────────
         inserted = await self.repo.upsert_candidates(approved, merchant_id)
         _emit_cloudwatch("CandidatesApproved", float(inserted))
         _emit_cloudwatch("CouponGenerated", float(inserted))
@@ -239,7 +252,12 @@ class RecoveryIntelligenceAgent:
         recoverable = sum(c.recoverable_revenue for c in approved)
         _emit_cloudwatch("RecoverableRevenue", recoverable, unit="None")
 
-        # ── 5. Publish EventBridge event ─────────────────────────────────────
+        # Counts by category
+        failed_count = sum(1 for c in approved if "PAYMENT" in getattr(c, "recovery_signal", ""))
+        cancelled_count = sum(1 for c in approved if "CANCEL" in getattr(c, "recovery_signal", ""))
+        abandoned_count = sum(1 for c in approved if "ABANDON" in getattr(c, "recovery_signal", ""))
+
+        # ── 5. Publish EventBridge event & audit log ──────────────────────
         elapsed_ms = round((time.perf_counter() - start_ts) * 1000, 2)
         event_detail = {
             "trace_id": trace_id,
@@ -250,7 +268,7 @@ class RecoveryIntelligenceAgent:
             "elapsed_ms": elapsed_ms,
         }
         try:
-            aws_manager.put_event(
+            aws_manager.publish_eventbridge(
                 event_type="RECOVERY_CANDIDATES_CREATED",
                 detail=event_detail,
                 source="revenuepilot.recovery.ai",
@@ -258,45 +276,25 @@ class RecoveryIntelligenceAgent:
         except Exception as exc:
             logger.warning("EventBridge publish failed", error=str(exc))
 
-        # Also write to local events collection for dashboard
-        try:
-            await db.events.insert_one({
-                "event_id": f"evt_{uuid.uuid4().hex[:10]}",
-                "event_type": "RECOVERY_CANDIDATES_CREATED",
-                "source": "revenuepilot.recovery.ai",
-                "merchant_id": merchant_id,
-                "trace_id": trace_id,
-                "payload": event_detail,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "severity": "info",
-            })
-        except Exception:
-            pass
-            
-        # ── 6. Create Campaign Summary ───────────────────────────────────────
-        critical = sum(1 for c in approved if c.priority == "CRITICAL")
-        high = sum(1 for c in approved if c.priority == "HIGH")
-        medium = sum(1 for c in approved if c.priority == "MEDIUM")
-        
+        # Campaign summary
         campaign_summary = {
             "campaign_id": campaign_id,
             "merchant_id": merchant_id,
             "customers_analyzed": len(customers),
             "candidates_created": inserted,
-            "critical": critical,
-            "high": high,
-            "medium": medium,
+            "failed_payments": failed_count,
+            "cancelled_payments": cancelled_count,
+            "abandoned_carts": abandoned_count,
             "recoverable_revenue": round(recoverable, 2),
             "scheduled_send_time": scheduled_time_iso,
             "status": "SCHEDULED",
         }
-        
         await self.repo.create_campaign_run(campaign_summary)
 
         logger.info(
             "RecoveryIntelligenceAgent completed",
             customers_analyzed=len(customers),
-            candidates_approved=inserted,
+            candidates_created=inserted,
             recoverable_revenue=recoverable,
             elapsed_ms=elapsed_ms,
             trace_id=trace_id,
@@ -304,21 +302,24 @@ class RecoveryIntelligenceAgent:
         )
 
         return {
+            "status": "SUCCESS",
             "success": True,
             "campaign_id": campaign_id,
             "customers_analyzed": len(customers),
             "candidates_created": inserted,
-            "critical": critical,
-            "high": high,
-            "medium": medium,
+            "failed_payments": failed_count,
+            "cancelled_payments": cancelled_count,
+            "abandoned_carts": abandoned_count,
             "recoverable_revenue": round(recoverable, 2),
-            "scheduled_send_time": scheduled_time_iso
+            "scheduled_campaign_time": scheduled_display_time,
+            "campaign_status": "SCHEDULED",
+            "trace_id": trace_id,
         }
 
     # ── Customer Fetching ──────────────────────────────────────────────────────
 
     async def _fetch_recovery_candidates(
-        self, db: Any, merchant_id: str, trace_id: str
+        self, db: Any, merchant_id: str, trace_id: str, period: str = "all"
     ) -> List[Dict[str, Any]]:
         """
         Fetch customers with recovery signals from multiple collections.
@@ -341,14 +342,15 @@ class RecoveryIntelligenceAgent:
 
         customers: Dict[str, Dict[str, Any]] = {}
         mq = {"merchant_id": merchant_id}
+        from app.services.dashboard_analytics import _get_kolkata_date_filter
+        date_flt = _get_kolkata_date_filter("created_at", period)
 
         # Source 1: Failed payments
         try:
-            cutoff_48h = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
-            async for p in db.payments.find(
-                {**mq, "status": {"$in": ["failed", "FAILED"]}, "created_at": {"$gte": cutoff_48h}},
-                {"_id": 0},
-            ):
+            pay_query = {**mq, "status": {"$in": ["failed", "FAILED"]}}
+            if date_flt:
+                pay_query.update(date_flt)
+            async for p in db.payments.find(pay_query, {"_id": 0}):
                 cid = str(p.get("customer_id") or p.get("customer_email") or "anon")
                 if cid not in recently_analyzed_ids:
                     customers.setdefault(cid, {}).update(p)
@@ -358,20 +360,24 @@ class RecoveryIntelligenceAgent:
 
         # Source 2: Cancelled orders
         try:
-            async for o in db.orders.find(
-                {**mq, "payment_status": {"$in": ["CANCELLED", "cancelled"]}},
-                {"_id": 0},
-            ).limit(200):
+            ord_query = {**mq, "payment_status": {"$in": ["CANCELLED", "cancelled", "Failed", "failed"]}}
+            if date_flt:
+                ord_query.update(date_flt)
+            async for o in db.orders.find(ord_query, {"_id": 0}).limit(200):
                 cid = str(o.get("customer_id") or o.get("customer_email") or "anon")
                 if cid not in recently_analyzed_ids and cid not in customers:
                     customers.setdefault(cid, {}).update(o)
-                    customers[cid]["_recovery_signal"] = "ORDER_CANCELLED"
+                    sig = "ORDER_CANCELLED" if str(o.get("payment_status")).upper() == "CANCELLED" else "PAYMENT_FAILED"
+                    customers[cid]["_recovery_signal"] = sig
         except Exception as exc:
             logger.warning("Cancelled orders fetch error", error=str(exc))
 
         # Source 3: Customers collection directly
         try:
-            async for c in db.customers.find(mq, {"_id": 0}).limit(200):
+            cust_query = mq.copy()
+            if date_flt:
+                cust_query.update(date_flt)
+            async for c in db.customers.find(cust_query, {"_id": 0}).limit(200):
                 cid = str(c.get("customer_id") or c.get("id") or c.get("email") or "anon")
                 if cid not in recently_analyzed_ids:
                     customers.setdefault(cid, {}).update(c)
@@ -465,11 +471,11 @@ class RecoveryIntelligenceAgent:
 def _generate_demo_customers(merchant_id: str) -> Dict[str, Dict[str, Any]]:
     """Generate realistic demo customers when no live data exists."""
     names = [
-        ("cust_001", "Rohan Sharma", "rohan@example.com", "+919876543210", 4999.0, "PAYMENT_FAILED"),
-        ("cust_002", "Ananya Verma", "ananya@example.com", "+919812345678", 2499.0, "ORDER_CANCELLED"),
-        ("cust_003", "Priya Nair", "priya@example.com", "+919765432100", 7999.0, "PAYMENT_FAILED"),
-        ("cust_004", "Karthik Iyer", "karthik@example.com", "+919654321001", 1299.0, "ORDER_CANCELLED"),
-        ("cust_005", "Deepika Singh", "deepika@example.com", "+919543210012", 12499.0, "PAYMENT_FAILED"),
+        ("cust_001", "Nishath Admin", "jpnishath@gmail.com", "+919876543210", 4999.0, "PAYMENT_FAILED"),
+        ("cust_002", "Nishath User", "nishath2306@gmail.com", "+919812345678", 2499.0, "ORDER_CANCELLED"),
+        ("cust_003", "Priya Nair", "jpnishath@gmail.com", "+919765432100", 7999.0, "PAYMENT_FAILED"),
+        ("cust_004", "Karthik Iyer", "nishath2306@gmail.com", "+919654321001", 1299.0, "ORDER_CANCELLED"),
+        ("cust_005", "Deepika Singh", "jpnishath@gmail.com", "+919543210012", 12499.0, "PAYMENT_FAILED"),
     ]
     result = {}
     for cid, name, email, phone, amount, signal in names:

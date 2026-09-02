@@ -64,10 +64,11 @@ class RecoveryCandidate:
     # Scoring
     recovery_score: float
     confidence: float
-    priority: str                   # CRITICAL / HIGH / MEDIUM / LOW / IGNORE
+    priority: str                   # CRITICAL / HIGH / MEDIUM / IGNORE
     recoverable_revenue: float
     recommended_discount: int
     coupon_code: str
+    coupon_expiry_hours: int
     recommended_channel: str
     reasoning: str
     # Personalised content
@@ -78,21 +79,39 @@ class RecoveryCandidate:
     whatsapp_message: str
     # Meta
     segment: str
+    llm_provider: str
     llm_model: str
-    status: str = "PENDING_AI_REVIEW"
+    trace_id: str
+    status: str = "SCHEDULED"
+    recovery_status: str = "SCHEDULED"
+    recovery_signal: str = "PAYMENT_FAILED"
     created_at: str = ""
     expires_at: str = ""
+    updated_at: str = ""
     scheduled_send_time: str = ""
-    timezone: str = "Asia/Kolkata"
-    campaign_id: str = ""
-    trace_id: str = ""
+    last_action: Optional[str] = None
+    message_history: List[Dict[str, Any]] = field(default_factory=list)
+    dispatch_metadata: Dict[str, Any] = field(default_factory=dict)
+    failure_reason: str = "Payment Failed"
 
     def to_dict(self) -> Dict[str, Any]:
         d = self.__dict__.copy()
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
         if not d.get("created_at"):
-            d["created_at"] = datetime.now(timezone.utc).isoformat()
+            d["created_at"] = now_iso
+        if not d.get("updated_at"):
+            d["updated_at"] = now_iso
         if not d.get("expires_at"):
-            d["expires_at"] = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            d["expires_at"] = (now_dt + timedelta(hours=d.get("coupon_expiry_hours", 24))).isoformat()
+        if not d.get("dispatch_metadata"):
+            d["dispatch_metadata"] = {
+                "email_sent": False,
+                "sms_sent": False,
+                "dispatch_time": None,
+                "campaign_run_id": None,
+            }
+        d["recovery_status"] = d.get("status", "SCHEDULED")
         return d
 
 
@@ -118,7 +137,7 @@ async def compute_customer_features(
     features.phone = raw.get("customer_phone") or raw.get("phone") or ""
     features.recovery_signal = raw.get("_recovery_signal", "PAYMENT_FAILED")
     features.recoverable_amount = float(
-        raw.get("amount") or raw.get("total_amount") or raw.get("cart_total") or 1999.0
+        raw.get("amount") or raw.get("total_amount") or raw.get("cart_total") or raw.get("subtotal") or 1999.0
     )
 
     cid_query = {
@@ -142,8 +161,8 @@ async def compute_customer_features(
             features.lifetime_value / max(len(paid), 1)
         )
         if paid:
-            last_order = max(paid, key=lambda o: o.get("created_at", ""))
-            last_dt = last_order.get("created_at", "")
+            last_order = max(paid, key=lambda o: str(o.get("created_at", "")))
+            last_dt = str(last_order.get("created_at", ""))
             if last_dt:
                 try:
                     parsed = datetime.fromisoformat(last_dt.rstrip("Z"))
@@ -189,9 +208,9 @@ async def compute_customer_features(
 
     # ── Recovery History ──────────────────────────────────────────────────────
     try:
-        campaigns = await db.recovery_campaigns.find(cid_query, {"_id": 0}).to_list(length=50)
+        campaigns = await db.recovery_candidates.find(cid_query, {"_id": 0}).to_list(length=50)
         features.previous_recovery_attempts = len(campaigns)
-        success = [c for c in campaigns if str(c.get("status", "")).upper() in ("COMPLETED", "SENT")]
+        success = [c for c in campaigns if str(c.get("status", "")).upper() in ("RECOVERED", "DISPATCHED", "EMAIL_SENT", "SMS_SENT")]
         features.previous_recovery_successes = len(success)
         coupon_used = [c for c in campaigns if c.get("coupon_code")]
         features.coupon_usage_rate = len(coupon_used) / max(len(campaigns), 1)
@@ -238,32 +257,27 @@ def assign_segment(f: CustomerFeatures) -> str:
 
 # ── Coupon Generation ─────────────────────────────────────────────────────────
 
+import random
+import string
+
 def generate_coupon(
     segment: str,
     ltv: float,
     recovery_score: float,
     expire_hours: int = 24,
 ) -> Dict[str, Any]:
-    """
-    Generates a dynamic coupon using segment + LTV + recovery urgency rules.
-    Rules:
-      VIP  > ₹5000 → 15%
-      LOYAL > ₹2500 → 10%
-      NEW → 5%
-      CRITICAL recovery (score ≥ 90) → 20% cap
-    """
     if recovery_score >= 90:
         pct = 20
-    elif segment == "VIP" and ltv > 5000:
+    elif segment == "VIP" or (recovery_score >= 75 and segment not in ("LOYAL", "NEW")):
         pct = 15
-    elif segment in ("LOYAL", "HIGH_VALUE") and ltv > 2500:
+    elif segment == "LOYAL" or (recovery_score >= 60 and segment != "NEW"):
         pct = 10
     elif segment == "NEW":
         pct = 5
     else:
         pct = 10
 
-    suffix = uuid.uuid4().hex[:4].upper()
+    suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
     code = f"RP{pct}_{suffix}"
     expires_at = (datetime.now(timezone.utc) + timedelta(hours=expire_hours)).isoformat()
 
@@ -271,6 +285,7 @@ def generate_coupon(
         "coupon_code": code,
         "discount_percentage": pct,
         "expires_at": expires_at,
+        "coupon_expiry_hours": expire_hours,
         "is_single_use": True,
     }
 
@@ -284,17 +299,17 @@ def score_candidate(
     segment: str,
     llm_decision: Dict[str, Any],
     customer_raw: Dict[str, Any],
+    trace_id: str = "",
 ) -> RecoveryCandidate:
     """
     Converts LLM decision + features into a scored RecoveryCandidate.
-    Priority mapping:
-      90–100 → CRITICAL
-      75–89  → HIGH
-      60–74  → MEDIUM
-      < 60   → IGNORE
+    Score thresholds:
+      90–100 → CRITICAL, 20% discount
+      75–89  → HIGH, 15% discount
+      60–74  → MEDIUM, 10% discount
+      < 60   → IGNORE, no candidate
     """
     raw_score = float(llm_decision.get("recovery_probability", 65))
-    # Boost for high cart value
     if features.recoverable_amount > 5000:
         raw_score = min(100, raw_score + 5)
     if features.failure_type == "GATEWAY_TIMEOUT":
@@ -313,16 +328,24 @@ def score_candidate(
     else:
         priority = "IGNORE"
 
-    confidence = min(1.0, score / 100 + 0.05)
+    confidence = min(1.0, round(score / 100 + 0.02, 3))
 
-    coupon_data = generate_coupon(segment, features.lifetime_value, score)
-    discount = int(llm_decision.get("recommended_discount", coupon_data["discount_percentage"]))
+    coupon_data = generate_coupon(segment, features.lifetime_value, score, expire_hours=24)
+    discount = coupon_data["discount_percentage"]
 
     order_id = (
         customer_raw.get("order_id")
         or customer_raw.get("payment_id")
-        or f"ord_{uuid.uuid4().hex[:8]}"
+        or (f"cart_{customer_id}" if "ABANDONED" in features.recovery_signal else f"ord_{uuid.uuid4().hex[:8]}")
     )
+
+    failure_reason = customer_raw.get("failure_reason") or customer_raw.get("error_code") or ("Checkout Abandoned" if "ABANDONED" in features.recovery_signal else "Payment Failed")
+
+    from app.core.config import settings
+    llm_provider_name = "gemini"
+    llm_model_name = str(getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash"))
+
+    now_iso = datetime.now(timezone.utc).isoformat()
 
     return RecoveryCandidate(
         candidate_id=f"cand_{uuid.uuid4().hex[:10]}",
@@ -333,28 +356,47 @@ def score_candidate(
         customer_email=features.email,
         customer_phone=features.phone,
         recovery_score=score,
-        confidence=round(confidence, 3),
+        confidence=confidence,
         priority=priority,
         recoverable_revenue=float(llm_decision.get("recoverable_revenue", features.recoverable_amount)),
         recommended_discount=discount,
         coupon_code=coupon_data["coupon_code"],
+        coupon_expiry_hours=24,
         recommended_channel=str(llm_decision.get("recommended_channel", "EMAIL+SMS")),
-        reasoning=str(llm_decision.get("reasoning", "AI-determined recovery opportunity"))[:1000],
-        email_subject=str(llm_decision.get("email_subject", f"Your cart is waiting — {discount}% off")),
+        reasoning=str(llm_decision.get("reasoning", "AI-determined high probability recovery opportunity"))[:1000],
+        email_subject=str(llm_decision.get("email_subject", f"Complete your payment — {discount}% OFF expires tonight")),
         email_body_html=str(llm_decision.get("email_body_html", "")),
         email_body_text=str(llm_decision.get("email_body_text", "")),
-        sms_message=str(llm_decision.get("sms_message", f"RevenuePilot: Use {coupon_data['coupon_code']} for {discount}% OFF!")),
-        whatsapp_message=str(llm_decision.get("whatsapp_message", "")),
+        sms_message=str(llm_decision.get("sms_message", f"RevenuePilot: Your ₹{int(features.recoverable_amount)} payment is waiting. Use {coupon_data['coupon_code']} for {discount}% OFF today.")),
+        whatsapp_message=str(llm_decision.get("whatsapp_message", f"👋 Hi {features.name}! We saved your order worth ₹{int(features.recoverable_amount)}. Use {coupon_data['coupon_code']} within 24 hours for {discount}% OFF.")),
         segment=segment,
-        llm_model=getattr(__import__("app.core.config", fromlist=["settings"]).settings, "GEMINI_MODEL", "local-sim"),
-        status="SCHEDULED" if score >= SCORE_THRESHOLD else "PENDING_AI_REVIEW",
+        llm_provider=llm_provider_name,
+        llm_model=llm_model_name,
+        trace_id=trace_id or f"trace_{uuid.uuid4().hex[:10]}",
+        status="SCHEDULED" if priority != "IGNORE" else "IGNORE",
+        recovery_status="SCHEDULED" if priority != "IGNORE" else "IGNORE",
+        recovery_signal=features.recovery_signal,
+        created_at=now_iso,
         expires_at=coupon_data["expires_at"],
+        updated_at=now_iso,
         scheduled_send_time="",
-        timezone="Asia/Kolkata",
-        campaign_id="",
+        last_action=None,
+        message_history=[{
+            "timestamp": now_iso,
+            "action": "Candidate Created",
+            "by": "RecoveryIntelligenceAgent",
+            "details": f"Candidate scheduled with score {score} and coupon {coupon_data['coupon_code']}"
+        }],
+        dispatch_metadata={
+            "email_sent": False,
+            "sms_sent": False,
+            "dispatch_time": None,
+            "campaign_run_id": None
+        },
+        failure_reason=failure_reason,
     )
 
 
-# Import SCORE_THRESHOLD here after function definition
 from app.core.config import settings  # noqa: E402
 SCORE_THRESHOLD: float = float(getattr(settings, "RECOVERY_AGENT_SCORE_THRESHOLD", 60))
+

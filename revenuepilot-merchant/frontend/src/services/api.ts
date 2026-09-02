@@ -3,8 +3,8 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 const STORE_API = import.meta.env.VITE_STORE_API_URL || 'http://localhost:8000/api/v1';
 const AI_API = import.meta.env.VITE_AI_API_URL || 'http://localhost:8001';
 
-function createClient(baseURL: string): AxiosInstance {
-  const client = axios.create({ baseURL, timeout: 10000 });
+function createClient(baseURL: string, timeout = 15000): AxiosInstance {
+  const client = axios.create({ baseURL, timeout });
 
   client.interceptors.request.use((config) => {
     const token = localStorage.getItem('merchant_token');
@@ -32,8 +32,8 @@ function createClient(baseURL: string): AxiosInstance {
   return client;
 }
 
-export const storeClient = createClient(STORE_API);
-export const aiClient = createClient(AI_API);
+export const storeClient = createClient(STORE_API, 15000);
+export const aiClient = createClient(AI_API, 60000);
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export interface LoginPayload { email: string; password: string; }
@@ -69,6 +69,7 @@ export const aiAPI = {
   webhookMetrics: () => aiClient.get('/merchant/webhooks'),
 
   // Candidate Manual Recovery Endpoints
+  analyzeRecovery: (params?: any) => aiClient.post('/automation/recovery/analyze', params || {}),
   sendEmail: (candidateId: string) => aiClient.post(`/merchant/recovery/send-email/${candidateId}`),
   sendSMS: (candidateId: string) => aiClient.post(`/merchant/recovery/send-sms/${candidateId}`),
   sendBoth: (candidateId: string) => aiClient.post(`/merchant/recovery/send-both/${candidateId}`),

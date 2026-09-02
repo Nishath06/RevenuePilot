@@ -57,34 +57,37 @@ def build_recovery_prompt(
     }
 
     instruction = """
-You are a senior revenue recovery AI for an Indian e-commerce platform.
+You are a senior revenue recovery AI for an Indian e-commerce platform powered by RevenuePilot.
 
-Analyze the customer profile and decide whether to launch a personalized recovery campaign.
+Analyze the customer profile and generate a personalized recovery campaign.
 
-STRICT RULES:
-- Consider payment failure type, cart value, segment, and past recovery history.
-- Never recommend recovery below 60% probability.
-- Discount cap: 20% maximum. VIP/Loyal customers get higher discounts.
-- Channel priority: EMAIL+SMS for high value, SMS only for low cart value.
-- Best send time: 6–9 PM IST for maximum open rates.
-- Generate personalized content using the customer's segment and failure type.
-- All currency values are in INR (₹).
-- Return ONLY valid JSON. No markdown, no explanation.
+STRICT RULES & CONSTRAINTS:
+1. Consider payment failure type, recoverable revenue, segment, and past recovery history.
+2. If probability < 60, set recovery_probability below 60.
+3. Recommended discount should be 20 for CRITICAL (>=90 score), 15 for HIGH (>=75 score), or 10 for MEDIUM (>=60 score).
+4. Generate personalized templates:
+   - email_subject: Catchy subject mentioning discount or payment status.
+   - email_body_html: Responsive HTML containing RevenuePilot logo area, customer greeting with first name, payment summary (failed amount & reason), coupon code highlight block with 24h expiry notice, clear CTA button ("Complete Payment"), and merchant footer.
+   - email_body_text: Matching plain text version.
+   - sms_message: Under 160 characters. Must include coupon code, 24h expiry, and recoverable amount. Format e.g.: "RevenuePilot: Your ₹3562 payment is waiting. Use RP20_A91F for 20% OFF today."
+   - whatsapp_message: Conversational WhatsApp message with emojis, <= 300 characters. Format e.g.: "👋 Hi Rohan! We saved your order worth ₹3562. Use RP20_A91F within 24 hours for 20% OFF."
+5. All currency values are in INR (₹).
+6. Return ONLY valid JSON matching the exact key format. No markdown fences.
 
-REQUIRED JSON FIELDS (all mandatory):
+REQUIRED JSON FIELDS:
 {
   "recovery_probability": <integer 0-100>,
   "recoverable_revenue": <float>,
-  "recommended_discount": <integer 5-20>,
-  "recommended_channel": <"EMAIL+SMS" | "EMAIL" | "SMS" | "WHATSAPP+EMAIL">,
-  "best_send_time": <string, e.g. "18:30 IST">,
+  "recommended_discount": <integer 10 | 15 | 20>,
+  "recommended_channel": "EMAIL+SMS",
   "reasoning": <string, max 300 chars>,
   "email_subject": <string>,
   "email_body_html": <string, HTML>,
   "email_body_text": <string, plain text>,
   "sms_message": <string, max 160 chars>,
-  "whatsapp_message": <string>
+  "whatsapp_message": <string, max 300 chars>
 }
 """.strip()
 
     return f"{instruction}\n\nCUSTOMER DATA:\n{json.dumps(context, indent=2, default=str)}"
+

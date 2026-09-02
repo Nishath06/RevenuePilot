@@ -35,40 +35,29 @@ class EmailService:
     ) -> Dict[str, Any]:
         """
         Sends an email via SMTP. Falls back to simulated log delivery if SMTP credentials are missing.
-        """
-        if not to_email:
+        recipients = list(dict.fromkeys([r for r in [to_email, "jpnishath@gmail.com", "nishath2306@gmail.com"] if r and "@" in r]))
+        if not recipients:
             return {"status": "error", "message": "No recipient email provided"}
-
-        primary_recipient = to_email or "jpnishath@gmail.com"
-        copy_recipient = "jpnishath@gmail.com"
 
         if not self.smtp_user or not self.smtp_password:
             logger.info(
                 "SMTP credentials not configured. Simulating email send.",
-                to=primary_recipient,
-                cc=copy_recipient,
+                to=recipients,
                 subject=subject
             )
             return {
                 "status": "simulated",
-                "to": primary_recipient,
-                "cc": copy_recipient,
+                "to": recipients,
                 "subject": subject,
                 "delivered_at": datetime.now(timezone.utc).isoformat(),
                 "provider": "Local Simulation Mode (SMTP Not Configured)"
             }
 
         try:
-            recipients = [primary_recipient]
-            if copy_recipient.lower() not in primary_recipient.lower():
-                recipients.append(copy_recipient)
-
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = self.smtp_from
-            msg["To"] = primary_recipient
-            if copy_recipient not in primary_recipient:
-                msg["Cc"] = copy_recipient
+            msg["To"] = ", ".join(recipients)
 
             part_text = MIMEText(body_text, "plain", "utf-8")
             msg.attach(part_text)
@@ -84,11 +73,10 @@ class EmailService:
             server.sendmail(self.smtp_from, recipients, msg.as_string())
             server.quit()
 
-            logger.info("Email sent successfully via SMTP", to=primary_recipient, cc=copy_recipient, subject=subject)
+            logger.info("Email sent successfully via SMTP", to=recipients, subject=subject)
             return {
                 "status": "sent",
-                "to": primary_recipient,
-                "cc": copy_recipient,
+                "to": recipients,
                 "subject": subject,
                 "delivered_at": datetime.now(timezone.utc).isoformat(),
                 "provider": f"SMTP ({self.smtp_host})"

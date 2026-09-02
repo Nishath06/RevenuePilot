@@ -352,44 +352,70 @@ async def _enrich_candidate(item: dict, item_type: str) -> dict:
     })
     return res
 
-async def get_recoverable_orders(period: str) -> dict:
-    f_raw, c_raw, a_raw = await asyncio.gather(
-        get_recoverable_failed_orders(period),
-        get_recoverable_cancelled_orders(period),
-        get_recoverable_abandoned_carts(period)
-    )
+async def get_recoverable_orders(period: str, merchant_id: str = "merch_default") -> dict:
+    """
+    Single Source of Truth: Reads directly from MongoDB `recovery_candidates` collection.
+    Categorizes documents into failed, cancelled, and abandoned lists for the React Recovery Center UI.
+    """
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
 
-    f_tasks = [_enrich_candidate(item, "failed") for item in f_raw]
-    c_tasks = [_enrich_candidate(item, "cancelled") for item in c_raw]
-    a_tasks = [_enrich_candidate(item, "abandoned") for item in a_raw]
+    date_flt = _get_kolkata_date_filter("created_at", period)
+    query: Dict[str, Any] = {}
+    if merchant_id and merchant_id != "all":
+        query["merchant_id"] = merchant_id
+    if date_flt:
+        query.update(date_flt)
 
-    f_enriched = await asyncio.gather(*f_tasks) if f_tasks else []
-    c_enriched = await asyncio.gather(*c_tasks) if c_tasks else []
-    a_enriched = await asyncio.gather(*a_tasks) if a_tasks else []
+    cursor = cand_col.find(query, {"_id": 0}).sort("created_at", -1)
+    all_candidates = await cursor.to_list(length=1000)
 
-    # Filter out items whose recovery_status is RECOVERED (Feature 2)
-    f_unrecovered = [i for i in f_enriched if i.get("recovery_status") != "RECOVERED"]
-    c_unrecovered = [i for i in c_enriched if i.get("recovery_status") != "RECOVERED"]
-    a_unrecovered = [i for i in a_enriched if i.get("recovery_status") != "RECOVERED"]
+    f_unrecovered = []
+    c_unrecovered = []
+    a_unrecovered = []
+    recovered_cnt = 0
 
-    # Calculate statistics for summary cards (Feature 3)
+    for item in all_candidates:
+        st = item.get("recovery_status") or item.get("status") or "SCHEDULED"
+        if st == "RECOVERED":
+            recovered_cnt += 1
+            continue
+
+        sig = str(item.get("recovery_signal") or item.get("type") or "PAYMENT_FAILED").upper()
+        amount = float(item.get("recoverable_revenue") or item.get("amount") or item.get("subtotal") or 0.0)
+
+        card = dict(item)
+        card["candidate_id"] = item.get("candidate_id") or item.get("order_id") or f"cand_{uuid.uuid4().hex[:8]}"
+        card["order_id"] = item.get("order_id") or card["candidate_id"]
+        card["amount"] = amount
+        card["subtotal"] = amount
+        card["recovery_status"] = st
+        card["email_message"] = item.get("edited_email_message") or item.get("email_body_text") or item.get("email_message") or ""
+        card["whatsapp_message"] = item.get("edited_whatsapp_message") or item.get("whatsapp_message") or ""
+        card["failure_reason"] = item.get("failure_reason") or item.get("reasoning") or "Payment execution issue"
+
+        if "CANCEL" in sig or "CANCELLED" in sig:
+            card["type"] = "cancelled"
+            card["category"] = "cancelled"
+            c_unrecovered.append(card)
+        elif "ABANDON" in sig:
+            card["type"] = "abandoned"
+            card["category"] = "abandoned"
+            a_unrecovered.append(card)
+        else:
+            card["type"] = "failed"
+            card["category"] = "failed"
+            f_unrecovered.append(card)
+
     failed_cnt = len(f_unrecovered)
     cancelled_cnt = len(c_unrecovered)
     abandoned_cnt = len(a_unrecovered)
-    
-    total_rev = (
-        sum(float(i.get("amount", 0.0)) for i in f_unrecovered) +
-        sum(float(i.get("amount", 0.0)) for i in c_unrecovered) +
-        sum(float(i.get("subtotal") or i.get("amount", 0.0)) for i in a_unrecovered)
-    )
 
-    # Recovered count in period from recovery_candidates DB collection
-    db = get_mongodb()
-    date_flt = _get_kolkata_date_filter("recovered_at", period)
-    recovered_query = {"recovery_status": "RECOVERED"}
-    if date_flt:
-        recovered_query.update(date_flt)
-    recovered_cnt = await db.recovery_candidates.count_documents(recovered_query)
+    total_rev = (
+        sum(i["amount"] for i in f_unrecovered) +
+        sum(i["amount"] for i in c_unrecovered) +
+        sum(i["amount"] for i in a_unrecovered)
+    )
 
     total_candidates = failed_cnt + cancelled_cnt + abandoned_cnt + recovered_cnt
     success_rate = round((recovered_cnt / total_candidates * 100), 1) if total_candidates > 0 else 0.0
@@ -406,3 +432,4 @@ async def get_recoverable_orders(period: str) -> dict:
         "total_candidates_count": total_candidates,
         "success_rate_percentage": success_rate
     }
+

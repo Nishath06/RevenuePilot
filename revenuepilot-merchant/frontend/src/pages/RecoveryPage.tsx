@@ -38,6 +38,26 @@ export const RecoveryPage: React.FC = () => {
   const [savingDraft, setSavingDraft] = useState(false);
   const [showTimeline, setShowTimeline] = useState(true);
 
+  // Analysis State
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any | null>(null);
+
+  const handleAnalyzeCustomers = async () => {
+    setAnalyzing(true);
+    const toastId = toast.loading('Running Recovery Intelligence Agent (Gemini)...');
+    try {
+      const res = await aiAPI.analyzeRecovery({ period: selectedPeriod });
+      setAnalysisResult(res.data);
+      toast.success('Customer analysis complete! Candidates scheduled.', { id: toastId });
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to run customer analysis', { id: toastId });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const fetchData = () => {
     setLoading(true);
     aiAPI.recovery(selectedPeriod)
@@ -304,7 +324,17 @@ export const RecoveryPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 self-start md:self-auto">
+        <div className="flex items-center gap-3 self-start md:self-auto flex-wrap">
+          {/* Manual Trigger — Analyze Customers */}
+          <button
+            onClick={handleAnalyzeCustomers}
+            disabled={analyzing}
+            className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-extrabold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            <Sparkles className={`w-4 h-4 ${analyzing ? 'animate-spin' : ''}`} />
+            {analyzing ? 'Analyzing Customers...' : 'Analyze Customers'}
+          </button>
+
           {/* Feature 1 — Time Period Filter */}
           <div className="flex items-center gap-2 bg-[#111827] p-1.5 rounded-xl border border-[#1E293B]">
             <Clock className="w-4 h-4 text-slate-400 ml-2" />
@@ -950,6 +980,81 @@ export const RecoveryPage: React.FC = () => {
                     Close
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Analysis Result Popup Modal */}
+        {analysisResult && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0F172A] border border-emerald-500/30 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-6"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">AI Analysis Complete</h3>
+                    <p className="text-xs text-slate-400">Recovery Intelligence Agent Summary</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAnalysisResult(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-[#161F30] p-4 rounded-xl border border-slate-800">
+                  <p className="text-xs font-bold text-slate-400 uppercase">Customers Analyzed</p>
+                  <p className="text-2xl font-black text-white mt-1">{analysisResult.customers_analyzed}</p>
+                </div>
+                <div className="bg-[#161F30] p-4 rounded-xl border border-slate-800">
+                  <p className="text-xs font-bold text-emerald-400 uppercase">Candidates Scheduled</p>
+                  <p className="text-2xl font-black text-emerald-400 mt-1">{analysisResult.candidates_created}</p>
+                </div>
+                <div className="bg-[#161F30] p-4 rounded-xl border border-slate-800">
+                  <p className="text-xs font-bold text-slate-400 uppercase">Failed Payments</p>
+                  <p className="text-lg font-extrabold text-slate-200 mt-1">{analysisResult.failed_payments}</p>
+                </div>
+                <div className="bg-[#161F30] p-4 rounded-xl border border-slate-800">
+                  <p className="text-xs font-bold text-slate-400 uppercase">Cancelled / Carts</p>
+                  <p className="text-lg font-extrabold text-slate-200 mt-1">
+                    {(analysisResult.cancelled_payments || 0) + (analysisResult.abandoned_carts || 0)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl space-y-1">
+                <div className="flex justify-between items-center text-xs text-emerald-300 font-extrabold uppercase">
+                  <span>Recoverable Revenue</span>
+                  <span>Dispatch Schedule</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xl font-black text-white">
+                    ₹{(analysisResult.recoverable_revenue || 0).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-1 bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">
+                    {analysisResult.scheduled_campaign_time || 'Today 6:00 PM IST'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={() => setAnalysisResult(null)}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition-colors shadow-lg shadow-emerald-600/30"
+                >
+                  View Scheduled Candidates
+                </button>
               </div>
             </motion.div>
           </div>

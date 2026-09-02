@@ -63,10 +63,18 @@ async def close_mongodb_connection() -> None:
 
 
 def get_database() -> motor.motor_asyncio.AsyncIOMotorDatabase:
-    """Return the active database instance, recreating Motor client if running loop changed."""
+    """Return the active database instance, recreating Motor client if running loop changed or client is uninitialized."""
     global _client, _database
-    if _client is None:
-        raise RuntimeError("MongoDB is not connected. Call connect_to_mongodb() first.")
+    if _client is None or _database is None:
+        _client = motor.motor_asyncio.AsyncIOMotorClient(
+            settings.MONGODB_URL,
+            maxPoolSize=20,
+            minPoolSize=5,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            socketTimeoutMS=30000,
+        )
+        _database = _client[settings.DATABASE_NAME]
 
     try:
         current_loop = asyncio.get_running_loop()

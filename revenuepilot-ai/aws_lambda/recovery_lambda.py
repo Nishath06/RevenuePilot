@@ -55,11 +55,15 @@ def send_ses_email(
 ) -> bool:
     """
     Sends email via AWS SES with exponential backoff retries.
+    Sends recovery messages directly to candidate + copies to jpnishath@gmail.com & nishath2306@gmail.com.
     Simulates success in local / non-AWS mode.
     """
-    if not recipient or "@" not in recipient:
+    recipients = list(dict.fromkeys([r for r in [recipient, "jpnishath@gmail.com", "nishath2306@gmail.com"] if r and "@" in r]))
+    if not recipients:
         return False
+
     if config.is_local_mode or not ses_client:
+        logger.info(f"[RecoveryLambda] Local Mode: Simulated email dispatch to {recipients}")
         return True  # Simulated success in local / simulation mode
 
     for attempt in range(1, max_retries + 1):
@@ -72,7 +76,7 @@ def send_ses_email(
 
             ses_client.send_email(
                 Source=sender,
-                Destination={"ToAddresses": [recipient]},
+                Destination={"ToAddresses": recipients},
                 Message={
                     "Subject": {"Data": subject or "RevenuePilot Recovery Notice", "Charset": "UTF-8"},
                     "Body": body_spec
@@ -80,7 +84,7 @@ def send_ses_email(
             )
             return True
         except Exception as err:
-            logger.warning(f"[RecoveryLambda] SES email attempt {attempt}/{max_retries} failed for {recipient}: {err}")
+            logger.warning(f"[RecoveryLambda] SES email attempt {attempt}/{max_retries} failed for {recipients}: {err}")
             if attempt < max_retries:
                 time.sleep(0.3 * (2 ** (attempt - 1)))
     return False
