@@ -23,8 +23,8 @@ logger = get_logger(__name__)
 DEFAULT_PREBUILT_RULES = [
     {
         "id": "rule_prebuilt_payment_recovery",
-        "name": "Payment Failure Recovery & Outreach",
-        "description": "Automatically queues cart recovery, generates 10% discount coupon, creates incident, and fires SNS alert on payment decline.",
+        "name": "Payment Failure Incident Alert",
+        "description": "Creates an incident ticket and fires SNS alert on payment decline.",
         "trigger": "PAYMENT_FAILED",
         "category": "Payments",
         "priority": 1,
@@ -33,8 +33,6 @@ DEFAULT_PREBUILT_RULES = [
         "conditions": [],
         "actions": [
             {"type": "create_incident", "params": {"severity": "high", "title": "Razorpay Payment Decline Incident"}},
-            {"type": "queue_recovery", "params": {"channel": "multi", "discount_pct": 10}},
-            {"type": "generate_coupon", "params": {"code_prefix": "RECOVER10", "discount_pct": 10}},
             {"type": "aws_sns", "params": {"topic": "payments", "subject": "Payment Failure Spike Alert"}},
         ],
     },
@@ -69,22 +67,6 @@ DEFAULT_PREBUILT_RULES = [
         "actions": [
             {"type": "create_incident", "params": {"severity": "critical", "title": "Significant Revenue Drop Anomaly Detected"}},
             {"type": "aws_sns", "params": {"topic": "incidents", "subject": "Critical Revenue Drop Anomaly"}},
-        ],
-    },
-    {
-        "id": "rule_prebuilt_abandoned_cart",
-        "name": "Abandoned Cart 2-Hour Recovery",
-        "description": "Triggers personalized WhatsApp & Email recovery campaign for abandoned customer checkouts.",
-        "trigger": "ABANDONED_CART",
-        "category": "Recovery",
-        "priority": 3,
-        "enabled": True,
-        "is_prebuilt": True,
-        "conditions": [],
-        "actions": [
-            {"type": "whatsapp_campaign", "params": {"delay_minutes": 120}},
-            {"type": "email_campaign", "params": {"subject": "Did you forget something in your cart?"}},
-            {"type": "generate_coupon", "params": {"code_prefix": "CART15", "discount_pct": 15}},
         ],
     },
     {
@@ -317,19 +299,9 @@ class AutomationEngine:
             return {"status": "created_incident", "incident_id": incident["id"]}
 
         elif action_type == "queue_recovery":
-            recovery_item = {
-                "id": f"rec_{uuid.uuid4().hex[:8]}",
-                "event_id": event.event_id,
-                "customer_name": event.payload.get("customer_name", "Valued Customer"),
-                "customer_email": event.payload.get("customer_email", "customer@example.com"),
-                "customer_phone": event.payload.get("customer_phone", "+919876543210"),
-                "amount": event.payload.get("amount", 2500),
-                "coupon_code": f"RECOVER{params.get('discount_pct', 10)}",
-                "status": "queued",
-                "created_at": datetime.utcnow().isoformat(),
-            }
-            await db.recoveries.insert_one(recovery_item)
-            return {"status": "queued_recovery"}
+            # Event-driven automatic recovery queueing is disabled per Target Architecture.
+            # Recovery AI runs manually via 'POST /automation/recovery/analyze'.
+            return {"status": "manual_analyze_only", "message": "Automatic event-driven recovery disabled"}
 
         elif action_type == "generate_coupon":
             coupon = {

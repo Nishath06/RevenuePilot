@@ -29,34 +29,6 @@ DEFAULT_AUTOMATION_SCHEDULES = [
         "failure_count": 0,
     },
     {
-        "id": "sched_failed_pay",
-        "schedule_name": "Failed Payment Recovery",
-        "cron_expression": "15 9 * * *",
-        "frequency": "Every day at 9:15 AM",
-        "category": "Recovery",
-        "enabled": True,
-        "last_run": None,
-        "next_run": None,
-        "status": "active",
-        "execution_count": 14,
-        "success_count": 14,
-        "failure_count": 0,
-    },
-    {
-        "id": "sched_cancelled_ord",
-        "schedule_name": "Cancelled Order Recovery",
-        "cron_expression": "30 9 * * *",
-        "frequency": "Every day at 9:30 AM",
-        "category": "Recovery",
-        "enabled": True,
-        "last_run": None,
-        "next_run": None,
-        "status": "active",
-        "execution_count": 14,
-        "success_count": 14,
-        "failure_count": 0,
-    },
-    {
         "id": "sched_rev_health",
         "schedule_name": "Revenue Health Scan",
         "cron_expression": "0 10 * * *",
@@ -185,12 +157,6 @@ class AutomationSchedulerService:
         if "inventory" in name.lower():
             from app.services.watchdog_service import watchdog_service
             result_info = await watchdog_service.run_inventory_watchdog()
-        elif "failed payment" in name.lower():
-            from app.services.recovery_service import recovery_service
-            result_info = await recovery_service.run_failed_payment_recovery()
-        elif "cancelled order" in name.lower():
-            from app.services.recovery_service import recovery_service
-            result_info = await recovery_service.run_cancelled_order_recovery()
         elif "revenue" in name.lower():
             from app.services.watchdog_service import watchdog_service
             result_info = await watchdog_service.run_revenue_watchdog()

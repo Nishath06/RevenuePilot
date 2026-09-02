@@ -125,20 +125,48 @@ async def get_recommendations():
 
 # ─── PART 3 & 4: RECOVERY AUTOMATIONS ───────────────────────────────────────
 
+@router.post("/recovery/analyze")
+async def analyze_recovery_candidates(payload: Optional[Dict[str, Any]] = None):
+    """
+    POST /automation/recovery/analyze
+    Merchant triggers manual recovery analysis.
+    Runs Recovery Intelligence Agent (Gemini) locally:
+    - Scores customers with failed payments/cancelled orders/abandoned carts
+    - Assigns segment and generates discount coupon
+    - Generates personalized AI email/SMS templates
+    - Stores candidates in MongoDB with status = 'SCHEDULED'
+    - Scheduled send time set for 6:00 PM IST (for AWS EventBridge -> RecoveryLambda)
+    - Returns summary popup analytics for the merchant UI
+    """
+    from app.services.recovery_intelligence_agent import recovery_intelligence_agent
+    params = payload or {}
+    merchant_id = params.get("merchant_id", "merch_default")
+    trace_id = params.get("trace_id")
+    return await recovery_intelligence_agent.run(merchant_id=merchant_id, trace_id=trace_id)
+
+
 @router.post("/recovery/failed-payments")
-async def trigger_failed_payment_recovery():
+async def trigger_failed_payment_recovery(payload: Optional[Dict[str, Any]] = None):
     """
-    PART 3 — Trigger Failed Payment Recovery Automation.
+    Trigger Recovery Customer Analysis (delegates to /recovery/analyze).
     """
-    return await recovery_service.run_failed_payment_recovery()
+    from app.services.recovery_intelligence_agent import recovery_intelligence_agent
+    params = payload or {}
+    merchant_id = params.get("merchant_id", "merch_default")
+    trace_id = params.get("trace_id")
+    return await recovery_intelligence_agent.run(merchant_id=merchant_id, trace_id=trace_id)
 
 
 @router.post("/recovery/cancelled-orders")
-async def trigger_cancelled_order_recovery():
+async def trigger_cancelled_order_recovery(payload: Optional[Dict[str, Any]] = None):
     """
-    PART 4 — Trigger Cancelled Order Recovery Automation.
+    Trigger Recovery Customer Analysis (delegates to /recovery/analyze).
     """
-    return await recovery_service.run_cancelled_order_recovery()
+    from app.services.recovery_intelligence_agent import recovery_intelligence_agent
+    params = payload or {}
+    merchant_id = params.get("merchant_id", "merch_default")
+    trace_id = params.get("trace_id")
+    return await recovery_intelligence_agent.run(merchant_id=merchant_id, trace_id=trace_id)
 
 
 @router.get("/recovery/campaigns")

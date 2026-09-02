@@ -95,6 +95,15 @@ async def get_customer_metrics() -> CustomerMetrics:
     return result
 
 
+def _clean_item(o: dict) -> dict:
+    item = dict(o)
+    if "_id" in item:
+        item["_id"] = str(item["_id"])
+    for k, v in list(item.items()):
+        if hasattr(v, "isoformat"):
+            item[k] = v.isoformat()
+    return item
+
 async def get_recovery_data(period: str = "all") -> RecoveryResponse:
     """Build recovery payload using shared dashboard analytics."""
     from app.services import dashboard_analytics
@@ -107,78 +116,51 @@ async def get_recovery_data(period: str = "all") -> RecoveryResponse:
 
     failed_items = []
     for o in failed_order_docs:
-        customer_name = o.get("customer_name")
-        amount = o.get("total_amount", 0.0)
-        wa_msg = f"Hi {customer_name}! Your payment of ₹{amount:.0f} failed. Need help? Reply to chat with support."
-        email_msg = f"Subject: Complete your transaction\nHi {customer_name},\nWe noticed your recent payment attempt failed. You can try again securely via this link."
-        failed_items.append({
-            "order_id": o.get("order_id"),
-            "customer_name": customer_name,
-            "customer_email": o.get("customer_email"),
-            "customer_phone": o.get("customer_phone"),
-            "amount": amount,
-            "failure_reason": o.get("failure_reason"),
-            "error_code": o.get("error_code"),
-            "created_at": o.get("created_at").isoformat() if hasattr(o.get("created_at"), "isoformat") else str(o.get("created_at")),
-            "whatsapp_message": wa_msg,
-            "email_message": email_msg,
-            "type": "failed"
-        })
+        item = _clean_item(o)
+        item["type"] = "failed"
+        item["category"] = "failed"
+        failed_items.append(item)
 
     cancelled_items = []
     for o in cancelled_order_docs:
-        customer_name = o.get("customer_name")
-        amount = o.get("total_amount", 0.0)
-        wa_msg = f"Hi {customer_name}! We saw you cancelled your purchase of ₹{amount:.0f}. Still thinking about it?"
-        email_msg = f"Subject: Resume checkout\nHi {customer_name},\nYou were almost there! Resume your checkout where you left off."
-        cancelled_items.append({
-            "order_id": o.get("order_id"),
-            "customer_name": customer_name,
-            "customer_email": o.get("customer_email"),
-            "customer_phone": o.get("customer_phone"),
-            "amount": amount,
-            "failure_reason": o.get("failure_reason", "Customer cancelled checkout"),
-            "created_at": o.get("created_at").isoformat() if hasattr(o.get("created_at"), "isoformat") else str(o.get("created_at")),
-            "whatsapp_message": wa_msg,
-            "email_message": email_msg,
-            "type": "cancelled"
-        })
+        item = _clean_item(o)
+        item["type"] = "cancelled"
+        item["category"] = "cancelled"
+        cancelled_items.append(item)
 
     abandoned_cart_list = []
+    for cart in carts:
+        item = _clean_item(cart)
+        item["type"] = "abandoned"
+        item["category"] = "abandoned"
+        item["amount"] = item.get("subtotal", item.get("amount", 0.0))
+        abandoned_cart_list.append(item)
+
     whatsapp_msgs = []
     email_msgs = []
-    
-    for cart in carts:
-        customer_name = cart.get("customer_name")
-        amount = cart.get("subtotal", 0.0)
-        items_cnt = cart.get('items_count', 0)
-        wa = f"Hi {customer_name}! You left {items_cnt} items in your cart. Click here to checkout securely: [Link]"
-        em = f"Subject: Your cart is waiting!\nHi {customer_name},\nYour items are reserved. Complete your purchase now before they sell out."
-        whatsapp_msgs.append(wa)
-        email_msgs.append(em)
-
-        abandoned_cart_list.append({
-            "user_id": cart.get("user_id"),
-            "items_count": items_cnt,
-            "subtotal": amount,
-            "updated_at": cart.get("updated_at").isoformat() if hasattr(cart.get("updated_at"), "isoformat") else str(cart.get("updated_at")),
-            "whatsapp_message": wa,
-            "email_message": em,
-            "type": "abandoned"
-        })
+    for item in failed_items + cancelled_items + abandoned_cart_list:
+        if item.get("whatsapp_message"):
+            whatsapp_msgs.append(item["whatsapp_message"])
+        if item.get("email_message"):
+            email_msgs.append(item["email_message"])
 
     from app.services import analytics
     top_customers = await analytics.top_customers(limit=5)
-    
-    total_recoverable = sum(item["amount"] for item in failed_items) + sum(item["amount"] for item in cancelled_items) + sum(item["subtotal"] for item in abandoned_cart_list)
 
     return RecoveryResponse(
-        failed_payments=failed_items + cancelled_items,
+        failed_payments=failed_items,
+        cancelled_orders=cancelled_items,
         abandoned_carts=abandoned_cart_list,
         whatsapp_messages=whatsapp_msgs,
         email_messages=email_msgs,
         priority_customers=[c.model_dump() for c in top_customers],
-        total_recoverable_amount=round(total_recoverable, 2),
+        total_recoverable_amount=recoverable.get("total_recoverable_amount", 0.0),
+        failed_count=recoverable.get("failed_count", len(failed_items)),
+        cancelled_count=recoverable.get("cancelled_count", len(cancelled_items)),
+        abandoned_count=recoverable.get("abandoned_count", len(abandoned_cart_list)),
+        recovered_count=recoverable.get("recovered_count", 0),
+        total_candidates_count=recoverable.get("total_candidates_count", 0),
+        success_rate_percentage=recoverable.get("success_rate_percentage", 0.0),
     )
 
 

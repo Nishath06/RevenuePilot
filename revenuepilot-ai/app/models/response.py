@@ -64,6 +64,7 @@ class InsightResponse(BaseModel):
 
 class RecoveryResponse(BaseModel):
     failed_payments: list[dict[str, Any]] = Field(default_factory=list)
+    cancelled_orders: list[dict[str, Any]] = Field(default_factory=list)
     abandoned_carts: list[dict[str, Any]] = Field(default_factory=list)
     whatsapp_messages: list[str] = Field(default_factory=list)
     email_messages: list[str] = Field(default_factory=list)

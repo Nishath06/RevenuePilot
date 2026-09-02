@@ -151,40 +151,9 @@ class RecoveryService:
                 }
             }
 
-            # TASK 5 — Trigger RecoveryLambda via Boto3 / Simulation
-            rec_payload = {
-                "merchant_id": "merch_default",
-                "customer_id": pay.get("customer_id", f"cust_{uuid.uuid4().hex[:6]}"),
-                "customer_name": cust_name,
-                "email": pay.get("customer_email", "customer@example.com"),
-                "phone": pay.get("customer_phone", "+919876543210"),
-                "amount": amt,
-                "payment_id": pay.get("payment_id", f"pay_{uuid.uuid4().hex[:6]}"),
-                "order_id": pay.get("order_id", f"ord_{uuid.uuid4().hex[:6]}"),
-                "product_ids": [pay.get("product_id", "prod_sku")],
-                "failure_reason": pay.get("failure_reason", "Gateway Timeout"),
-                "coupon_code": coupon_code,
-                "checkout_link": pay_link,
-            }
-            await cloud_event_bus.invoke_recovery_lambda(rec_payload)
-
             camp_insert = dict(camp_doc)
             await db.recovery_campaigns.insert_one(camp_insert)
 
-            # Publish SNS notification (Task 5)
-            send_notification(
-                topic_type_or_arn="payments",
-                subject=f"Recovery Campaign Dispatched: {coupon_code}",
-                message=f"Failed payment of ₹{amt:,.2f} for {cust_name}. Discount coupon {coupon_code} issued.",
-            )
-
-            # Emit EventBridge Event & Timeline
-            await cloud_event_bus.publish(
-                event_type="PAYMENT_RECOVERY_TRIGGERED",
-                payload={"campaign_id": campaign_id, "coupon": coupon_code, "amount": amt, "customer": cust_name},
-                source="recovery-engine",
-                severity="info",
-            )
             clean_camp = {k: str(v) if k == "_id" else v for k, v in camp_doc.items() if k != "_id"}
             campaigns_created.append(clean_camp)
 

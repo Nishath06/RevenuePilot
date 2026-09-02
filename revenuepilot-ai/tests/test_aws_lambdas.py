@@ -227,3 +227,33 @@ async def test_pdf_report_service_generation():
     assert decoded[:5] == b"%PDF-"
 
 
+def test_recovery_dispatch_lambda_scheduled_and_metrics():
+    """Test RecoveryLambda queries scheduled candidates, updates status/history, and outputs JSON summary."""
+    cand_id = f"cand_sched_{uuid.uuid4().hex[:8]}"
+    payload = {
+        "candidate_id": cand_id,
+        "merchant_id": "merch_unit_test",
+        "customer_name": "Suresh Kumar",
+        "customer_email": "suresh@example.com",
+        "customer_phone": "+919876543211",
+        "email_subject": "Complete your order with 15% OFF",
+        "email_body_html": "<p>Hi Suresh, use code RP15 to complete purchase!</p>",
+        "sms_message": "RevenuePilot: Complete your order with code RP15!",
+        "status": "SCHEDULED",
+        "recovery_status": "UNRECOVERED",
+        "scheduled_send_time": "2026-09-02T13:00:00+05:30"
+    }
+
+    res = recovery_handler(payload, DummyContext())
+    assert res["statusCode"] == 200
+    body = json.loads(res["body"]) if isinstance(res["body"], str) else res["body"]
+
+    assert body["status"] == "SUCCESS"
+    assert body["candidates_processed"] >= 1
+    assert body["emails_sent"] >= 1
+    assert body["sms_sent"] >= 1
+    assert body["failures"] == 0
+    assert "execution_time_ms" in body
+
+
+

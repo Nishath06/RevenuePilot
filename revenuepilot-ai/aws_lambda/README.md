@@ -31,7 +31,7 @@ This directory contains standalone Python 3.12/3.13 Lambda function handlers des
 | Function Name | Handler File | Trigger Source | Primary Services | Role & Capability |
 | :--- | :--- | :--- | :--- | :--- |
 | **InventoryLambda** | `inventory_lambda.py` | EventBridge Cron (6h) / API | EventBridge, SNS | Scans stockout velocity, flags low/out-of-stock items, triggers reorder alerts |
-| **RecoveryLambda** | `recovery_lambda.py` | EventBridge (`PAYMENT_FAILED`) | AWS SES, AWS SNS, EventBridge | Generates recovery coupons (`RECOVER10`), formats multi-channel templates (WhatsApp/Email/SMS) |
+| **RecoveryLambda** | `recovery_lambda.py` | EventBridge Cron (Daily 6:00 PM IST) | AWS SES, AWS SNS, MongoDB | Queries `recovery_candidates` (`SCHEDULED`), dispatches SES email + SNS SMS, updates status to `DISPATCHED` |
 | **ReportsLambda** | `reports_lambda.py` | EventBridge Cron (Daily 8 AM) | AWS S3, EventBridge | Generates date-filtered CSV, JSON, or PDF reports and uploads to S3 buckets |
 | **IncidentLambda** | `incident_lambda.py` | Watchdogs / Anomaly Alerts | AWS SNS, EventBridge | Registers operational incidents and dispatches priority notifications to SNS topics |
 | **CloudWatchLambda**| `cloudwatch_lambda.py` | EventBridge Cron (5 min) | AWS CloudWatch | Aggregates execution telemetry and pushes custom metrics (`RevenuePilot/AutoOps`) |
