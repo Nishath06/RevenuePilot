@@ -143,6 +143,11 @@ class Settings(BaseSettings):
     # ── Store Backend ─────────────────────────────────────────────────────────
     STORE_BACKEND_URL: str = "http://localhost:8000"
 
+    # ── Recovery AI ───────────────────────────────────────────────────────────
+    RECOVERY_CAMPAIGN_HOUR: int = 18
+    RECOVERY_CAMPAIGN_MINUTE: int = 0
+    RECOVERY_TIMEZONE: str = "Asia/Kolkata"
+
     def validate_runtime_configuration(self) -> None:
         if self.ENVIRONMENT.lower() in {"production", "staging"} and not self.JWT_SECRET:
             raise RuntimeError("JWT_SECRET is required in production")

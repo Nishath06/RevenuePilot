@@ -14,9 +14,11 @@ from app.models.metrics import (
     PaymentMetrics,
     RevenueMetrics,
 )
+from datetime import datetime, timezone
 from app.models.response import RecoveryResponse, PromptChip
 from app.services import analytics
 from app.services.cache import cache
+from app.db.mongodb import get_mongodb
 
 logger = get_logger(__name__)
 
@@ -93,110 +95,82 @@ async def get_customer_metrics() -> CustomerMetrics:
     return result
 
 
-async def get_recovery_data() -> RecoveryResponse:
-    """Build recovery payload: failed payments + cancelled payments + abandoned carts + AI recovery messages."""
-    orders_col = analytics.get_collection("orders")
-    users_col = analytics.get_collection("users")
-    payments_col = analytics.get_collection("payments")
+async def get_recovery_data(period: str = "all") -> RecoveryResponse:
+    """Build recovery payload using shared dashboard analytics."""
+    from app.services import dashboard_analytics
+    
+    # Use the shared analytics service (Single Source of Truth)
+    recoverable = await dashboard_analytics.get_recoverable_orders(period)
+    failed_order_docs = recoverable["failed_orders"]
+    cancelled_order_docs = recoverable["cancelled_orders"]
+    carts = recoverable["abandoned_carts"]
 
-    # 1. Fetch Failed Orders (up to 10)
-    failed_order_docs = await orders_col.find({"payment_status": "Failed"}).sort("created_at", -1).limit(10).to_list(10)
     failed_items = []
     for o in failed_order_docs:
-        user_doc = await users_col.find_one({"_id": o.get("user_id")}) or {}
-        pay_doc = await payments_col.find_one({"order_id": o.get("order_id")}) or {}
-        customer_name = user_doc.get("name", "Customer")
-        reason = pay_doc.get("failure_reason") or "Payment execution failed"
+        customer_name = o.get("customer_name")
         amount = o.get("total_amount", 0.0)
-
-        wa_msg = (
-            f"Hi {customer_name}! 👋 Your payment of ₹{amount:.0f} failed due to '{reason}'. "
-            f"Click here to retry your order with 1-click checkout: https://store.revenuepilot.dev/checkout/retry?order={o.get('order_id')}"
-        )
-        email_msg = (
-            f"Subject: Payment Failed — Complete Your Order {o.get('order_id')}\n\n"
-            f"Hi {customer_name},\n\nWe noticed your payment of ₹{amount:.0f} for order {o.get('order_id')} "
-            f"failed ({reason}). Don't worry! Your items are reserved for the next 24 hours.\n\n"
-            f"Retry Payment: https://store.revenuepilot.dev/checkout/retry?order={o.get('order_id')}"
-        )
+        wa_msg = f"Hi {customer_name}! Your payment of ₹{amount:.0f} failed. Need help? Reply to chat with support."
+        email_msg = f"Subject: Complete your transaction\nHi {customer_name},\nWe noticed your recent payment attempt failed. You can try again securely via this link."
         failed_items.append({
             "order_id": o.get("order_id"),
             "customer_name": customer_name,
-            "customer_email": user_doc.get("email", ""),
-            "customer_phone": user_doc.get("phone", ""),
+            "customer_email": o.get("customer_email"),
+            "customer_phone": o.get("customer_phone"),
             "amount": amount,
-            "failure_reason": reason,
-            "error_code": pay_doc.get("error_code") or "FAILED",
+            "failure_reason": o.get("failure_reason"),
+            "error_code": o.get("error_code"),
             "created_at": o.get("created_at").isoformat() if hasattr(o.get("created_at"), "isoformat") else str(o.get("created_at")),
             "whatsapp_message": wa_msg,
             "email_message": email_msg,
             "type": "failed"
         })
 
-    # 2. Fetch Cancelled Orders (up to 10)
-    cancelled_order_docs = await orders_col.find({"payment_status": "Cancelled"}).sort("created_at", -1).limit(10).to_list(10)
     cancelled_items = []
     for o in cancelled_order_docs:
-        user_doc = await users_col.find_one({"_id": o.get("user_id")}) or {}
-        customer_name = user_doc.get("name", "Customer")
+        customer_name = o.get("customer_name")
         amount = o.get("total_amount", 0.0)
-
-        wa_msg = (
-            f"Hi {customer_name}! 👋 We saw you cancelled your purchase of ₹{amount:.0f}. "
-            f"Use code RECOVER10 to get 10% OFF if you finish your order now!"
-        )
-        email_msg = (
-            f"Subject: Did you forget something? Here's 10% off!\n\n"
-            f"Hi {customer_name},\n\nYou left your order worth ₹{amount:.0f} behind. "
-            f"Complete checkout with code RECOVER10 for 10% off your purchase."
-        )
+        wa_msg = f"Hi {customer_name}! We saw you cancelled your purchase of ₹{amount:.0f}. Still thinking about it?"
+        email_msg = f"Subject: Resume checkout\nHi {customer_name},\nYou were almost there! Resume your checkout where you left off."
         cancelled_items.append({
             "order_id": o.get("order_id"),
             "customer_name": customer_name,
-            "customer_email": user_doc.get("email", ""),
-            "customer_phone": user_doc.get("phone", ""),
+            "customer_email": o.get("customer_email"),
+            "customer_phone": o.get("customer_phone"),
             "amount": amount,
-            "failure_reason": "Customer cancelled checkout",
+            "failure_reason": o.get("failure_reason", "Customer cancelled checkout"),
             "created_at": o.get("created_at").isoformat() if hasattr(o.get("created_at"), "isoformat") else str(o.get("created_at")),
             "whatsapp_message": wa_msg,
             "email_message": email_msg,
             "type": "cancelled"
         })
 
-    # 3. Fetch Abandoned Carts
-    carts = await analytics.abandoned_carts(limit=10)
     abandoned_cart_list = []
     whatsapp_msgs = []
     email_msgs = []
+    
     for cart in carts:
-        user_doc = await users_col.find_one({"_id": cart.user_id}) or {}
-        customer_name = user_doc.get("name", f"User {cart.user_id[-6:] if cart.user_id else 'Guest'}")
-        
-        wa_msg = (
-            f"Hi {customer_name}! 👋 You left {cart.items_count} item(s) worth ₹{cart.subtotal:.0f} in your cart. "
-            f"Complete your purchase now and get FREE shipping! 🛒"
-        )
-        email_msg = (
-            f"Subject: You left something behind!\n\n"
-            f"Hi {customer_name},\n\nWe noticed you left {cart.items_count} item(s) worth ₹{cart.subtotal:.0f} "
-            f"in your cart. Come back and complete your order before they sell out!"
-        )
-        whatsapp_msgs.append(wa_msg)
-        email_msgs.append(email_msg)
+        customer_name = cart.get("customer_name")
+        amount = cart.get("subtotal", 0.0)
+        items_cnt = cart.get('items_count', 0)
+        wa = f"Hi {customer_name}! You left {items_cnt} items in your cart. Click here to checkout securely: [Link]"
+        em = f"Subject: Your cart is waiting!\nHi {customer_name},\nYour items are reserved. Complete your purchase now before they sell out."
+        whatsapp_msgs.append(wa)
+        email_msgs.append(em)
 
         abandoned_cart_list.append({
-            "user_id": cart.user_id,
-            "customer_name": customer_name,
-            "items_count": cart.items_count,
-            "subtotal": cart.subtotal,
-            "updated_at": cart.updated_at.isoformat() if hasattr(cart.updated_at, "isoformat") else str(cart.updated_at),
-            "whatsapp_message": wa_msg,
-            "email_message": email_msg,
+            "user_id": cart.get("user_id"),
+            "items_count": items_cnt,
+            "subtotal": amount,
+            "updated_at": cart.get("updated_at").isoformat() if hasattr(cart.get("updated_at"), "isoformat") else str(cart.get("updated_at")),
+            "whatsapp_message": wa,
+            "email_message": em,
             "type": "abandoned"
         })
 
+    from app.services import analytics
     top_customers = await analytics.top_customers(limit=5)
-    total_recoverable = sum(item["amount"] for item in failed_items) + sum(item["amount"] for item in cancelled_items) + sum(c.subtotal for c in carts)
+    
+    total_recoverable = sum(item["amount"] for item in failed_items) + sum(item["amount"] for item in cancelled_items) + sum(item["subtotal"] for item in abandoned_cart_list)
 
     return RecoveryResponse(
         failed_payments=failed_items + cancelled_items,
@@ -237,7 +211,7 @@ async def get_recent_events(limit: int = 10) -> list[dict]:
     for o in recent_orders:
         status = o.get("payment_status", "Pending")
         order_id = o.get("order_id", "N/A")
-        amount = o.get("total_amount", 0.0)
+        amount = float(o.get("total_amount") or 0.0)
         dt = o.get("created_at")
         ts = dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
 
@@ -434,7 +408,7 @@ async def get_payment_metrics_detailed() -> dict:
         failed_table.append({
             "order_id": oid,
             "customer": user_doc.get("name", ord_doc.get("customer_name", "Merchant Customer")),
-            "amount": p.get("amount", ord_doc.get("total_amount", 0.0)),
+            "amount": float(p.get("amount") or 0.0),
             "failure_reason": p.get("error_description", p.get("failure_reason", "Gateway Timeout")),
             "error_code": p.get("error_code", "BAD_REQUEST_ERROR"),
             "gateway": "Razorpay",
@@ -476,9 +450,9 @@ async def get_order_metrics_detailed() -> dict:
 
         timeline_orders.append({
             "order_id": o.get("order_id", str(o.get("_id"))),
-            "customer_name": u.get("name", "Merchant Customer"),
-            "customer_email": u.get("email", "customer@example.com"),
-            "amount": o.get("total_amount", 0.0),
+            "customer_name": u.get("name") or o.get("customer_name") or o.get("name") or "Merchant Customer",
+            "customer_email": u.get("email") or o.get("customer_email") or o.get("email") or "customer@example.com",
+            "amount": float(o.get("total_amount") or 0.0),
             "status": status,
             "created_at": ts,
             "payment_initiated_at": ts,
@@ -695,5 +669,243 @@ async def get_webhooks_metrics_detailed() -> dict:
         "success_count": success_count,
         "retry_count": retry_count,
     }
+
+
+# ── RECOVERY CANDIDATE WORKFLOW ACTIONS ──────────────────────────────────────
+
+async def send_candidate_email(candidate_id: str, merchant_id: str = "merch_default") -> dict:
+    from fastapi import HTTPException
+    import uuid
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
+    logs_col = db.communication_logs
+    
+    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
+    
+    now_iso = datetime.now(timezone.utc).isoformat()
+    curr_status = cand.get("recovery_status", "PENDING")
+    new_status = "EMAIL+SMS_SENT" if curr_status in ["SMS_SENT", "EMAIL+SMS_SENT"] else "EMAIL_SENT"
+    
+    msg_history = cand.get("message_history", [])
+    msg_history.append({
+        "timestamp": now_iso,
+        "action": "Email Sent",
+        "channel": "EMAIL",
+        "by": "merchant_admin",
+        "details": f"Personalized email sent to {cand.get('customer_email', 'customer')}"
+    })
+    
+    update_doc = {
+        "recovery_status": new_status,
+        "email_sent_at": now_iso,
+        "last_action": "EMAIL_SENT",
+        "last_action_by": "merchant_admin",
+        "message_history": msg_history,
+        "updated_at": now_iso,
+    }
+    
+    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
+    
+    await logs_col.insert_one({
+        "log_id": str(uuid.uuid4()),
+        "merchant_id": merchant_id,
+        "candidate_id": candidate_id,
+        "channel": "SES_EMAIL",
+        "recipient": cand.get("customer_email"),
+        "status": "SUCCESS",
+        "sent_at": now_iso,
+        "payload": {"message": cand.get("edited_email_message") or cand.get("email_message")}
+    })
+    
+    cand.update(update_doc)
+    return cand
+
+
+async def send_candidate_sms(candidate_id: str, merchant_id: str = "merch_default") -> dict:
+    from fastapi import HTTPException
+    import uuid
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
+    logs_col = db.communication_logs
+    
+    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
+    
+    now_iso = datetime.now(timezone.utc).isoformat()
+    curr_status = cand.get("recovery_status", "PENDING")
+    new_status = "EMAIL+SMS_SENT" if curr_status in ["EMAIL_SENT", "EMAIL+SMS_SENT"] else "SMS_SENT"
+    
+    msg_history = cand.get("message_history", [])
+    msg_history.append({
+        "timestamp": now_iso,
+        "action": "SMS Sent",
+        "channel": "SMS",
+        "by": "merchant_admin",
+        "details": f"Recovery SMS sent to {cand.get('customer_phone', 'customer')}"
+    })
+    
+    update_doc = {
+        "recovery_status": new_status,
+        "sms_sent_at": now_iso,
+        "last_action": "SMS_SENT",
+        "last_action_by": "merchant_admin",
+        "message_history": msg_history,
+        "updated_at": now_iso,
+    }
+    
+    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
+    
+    await logs_col.insert_one({
+        "log_id": str(uuid.uuid4()),
+        "merchant_id": merchant_id,
+        "candidate_id": candidate_id,
+        "channel": "SNS_SMS",
+        "recipient": cand.get("customer_phone"),
+        "status": "SUCCESS",
+        "sent_at": now_iso,
+        "payload": {"message": cand.get("edited_whatsapp_message") or cand.get("whatsapp_message")}
+    })
+    
+    cand.update(update_doc)
+    return cand
+
+
+async def send_candidate_both(candidate_id: str, merchant_id: str = "merch_default") -> dict:
+    from fastapi import HTTPException
+    import uuid
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
+    logs_col = db.communication_logs
+    
+    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
+    
+    now_iso = datetime.now(timezone.utc).isoformat()
+    msg_history = cand.get("message_history", [])
+    msg_history.append({
+        "timestamp": now_iso,
+        "action": "Email & SMS Sent",
+        "channel": "BOTH",
+        "by": "merchant_admin",
+        "details": "Multi-channel recovery campaign dispatched"
+    })
+    
+    update_doc = {
+        "recovery_status": "EMAIL+SMS_SENT",
+        "email_sent_at": now_iso,
+        "sms_sent_at": now_iso,
+        "last_action": "BOTH_SENT",
+        "last_action_by": "merchant_admin",
+        "message_history": msg_history,
+        "updated_at": now_iso,
+    }
+    
+    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
+    
+    await logs_col.insert_many([
+        {
+            "log_id": str(uuid.uuid4()),
+            "merchant_id": merchant_id,
+            "candidate_id": candidate_id,
+            "channel": "SES_EMAIL",
+            "recipient": cand.get("customer_email"),
+            "status": "SUCCESS",
+            "sent_at": now_iso,
+            "payload": {"message": cand.get("edited_email_message") or cand.get("email_message")}
+        },
+        {
+            "log_id": str(uuid.uuid4()),
+            "merchant_id": merchant_id,
+            "candidate_id": candidate_id,
+            "channel": "SNS_SMS",
+            "recipient": cand.get("customer_phone"),
+            "status": "SUCCESS",
+            "sent_at": now_iso,
+            "payload": {"message": cand.get("edited_whatsapp_message") or cand.get("whatsapp_message")}
+        }
+    ])
+    
+    cand.update(update_doc)
+    return cand
+
+
+async def skip_candidate(candidate_id: str, merchant_id: str = "merch_default") -> dict:
+    from fastapi import HTTPException
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
+    
+    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
+    
+    now_iso = datetime.now(timezone.utc).isoformat()
+    msg_history = cand.get("message_history", [])
+    msg_history.append({
+        "timestamp": now_iso,
+        "action": "Candidate Skipped",
+        "by": "merchant_admin",
+        "details": "Merchant skipped recovery for candidate"
+    })
+    
+    update_doc = {
+        "recovery_status": "SKIPPED",
+        "last_action": "SKIPPED",
+        "last_action_by": "merchant_admin",
+        "message_history": msg_history,
+        "updated_at": now_iso,
+    }
+    
+    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
+    cand.update(update_doc)
+    return cand
+
+
+async def update_candidate_message(candidate_id: str, payload: dict, merchant_id: str = "merch_default") -> dict:
+    from fastapi import HTTPException
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
+    
+    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
+    
+    now_iso = datetime.now(timezone.utc).isoformat()
+    msg_history = cand.get("message_history", [])
+    msg_history.append({
+        "timestamp": now_iso,
+        "action": "Template Updated",
+        "by": "merchant_admin",
+        "details": "Merchant edited email/SMS recovery template text"
+    })
+    
+    update_doc = {
+        "edited_email_message": payload.get("email_message") or cand.get("edited_email_message"),
+        "edited_whatsapp_message": payload.get("whatsapp_message") or cand.get("edited_whatsapp_message"),
+        "notes": payload.get("notes") if "notes" in payload else cand.get("notes", ""),
+        "message_history": msg_history,
+        "updated_at": now_iso,
+    }
+    
+    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
+    cand.update(update_doc)
+    return cand
+
+
+async def get_candidate_history(candidate_id: str) -> dict:
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
+    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
+    if not cand:
+        return {"candidate_id": candidate_id, "history": []}
+    return {
+        "candidate_id": candidate_id,
+        "history": cand.get("message_history", []),
+        "recovery_status": cand.get("recovery_status", "PENDING")
+    }
+
 
 

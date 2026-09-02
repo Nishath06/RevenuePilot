@@ -116,6 +116,19 @@ async def _ensure_indexes() -> None:
         ("ai_conversations", [("merchant_id", 1), ("updated_at", -1)]),
         ("ai_messages", [("conversation_id", 1), ("timestamp", 1)]),
         ("merchant_settings", [("merchant_id", 1)]),
+        # Recovery Candidates
+        ("recovery_candidates", [("status", 1)]),
+        ("recovery_candidates", [("campaign_id", 1)]),
+        ("recovery_candidates", [("scheduled_send_time", 1)]),
+        ("recovery_candidates", [("customer_id", 1)]),
+        ("recovery_candidates", [("merchant_id", 1)]),
+        ("recovery_candidates", [("created_at", -1)]),
+        ("recovery_candidates", [("expires_at", 1)]),
+        # Campaign Runs
+        ("campaign_runs", [("campaign_id", 1)]),
+        ("campaign_runs", [("status", 1)]),
+        ("campaign_runs", [("created_at", -1)]),
+        ("campaign_runs", [("scheduled_send_time", 1)]),
     ]
 
     for coll_name, keys in index_specs:

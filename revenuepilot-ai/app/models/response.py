@@ -69,6 +69,12 @@ class RecoveryResponse(BaseModel):
     email_messages: list[str] = Field(default_factory=list)
     priority_customers: list[dict[str, Any]] = Field(default_factory=list)
     total_recoverable_amount: float = 0.0
+    failed_count: int = 0
+    cancelled_count: int = 0
+    abandoned_count: int = 0
+    recovered_count: int = 0
+    total_candidates_count: int = 0
+    success_rate_percentage: float = 0.0
 
 
 class HealthResponse(BaseModel):

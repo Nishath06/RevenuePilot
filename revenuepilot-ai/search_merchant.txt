@@ -1,0 +1,7 @@
+110: amount = float(o.get("total_amount") or 0.0)
+118: f"Hi {customer_name},\n\nWe noticed your payment of ₹{amount:.0f} for order {o.get('order_id')} "
+142: amount = float(o.get("total_amount") or 0.0)
+240: amount = o.get("total_amount", 0.0)
+437: "amount": p.get("amount", ord_doc.get("total_amount", 0.0)),
+481: "amount": o.get("total_amount", 0.0),
+682: "payload": {"event": evt, "payment_id": p.get("payment_id"), "amount": p.get("amount")},

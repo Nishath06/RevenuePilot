@@ -64,6 +64,17 @@ class RecoveryCandidateRepository:
         )
         return inserted
 
+    async def create_campaign_run(self, summary: dict) -> str:
+        """
+        Inserts a campaign summary into the `campaign_runs` collection.
+        Returns the inserted campaign ID.
+        """
+        db = get_mongodb()
+        summary.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        
+        await db.campaign_runs.insert_one(summary)
+        return summary["campaign_id"]
+
     # ── Read ───────────────────────────────────────────────────────────────────
 
     async def get_approved_candidates(
@@ -109,7 +120,7 @@ class RecoveryCandidateRepository:
         db = get_mongodb()
 
         total = await db[self.COLLECTION].count_documents({"merchant_id": merchant_id})
-        approved = await db[self.COLLECTION].count_documents({"merchant_id": merchant_id, "status": "APPROVED"})
+        approved = await db[self.COLLECTION].count_documents({"merchant_id": merchant_id, "status": "SCHEDULED"})
         sent = await db[self.COLLECTION].count_documents({"merchant_id": merchant_id, "status": "SENT"})
         pending = await db[self.COLLECTION].count_documents({"merchant_id": merchant_id, "status": "PENDING_AI_REVIEW"})
 
@@ -129,6 +140,13 @@ class RecoveryCandidateRepository:
             {"$sort": {"count": -1}},
             {"$limit": 5},
         ]).to_list(length=5)
+        
+        # Priorities for critical/high/medium counts in insights
+        priority_agg = await db[self.COLLECTION].aggregate([
+            {"$match": {"merchant_id": merchant_id, "status": "SCHEDULED"}},
+            {"$group": {"_id": "$priority", "count": {"$sum": 1}}}
+        ]).to_list(length=10)
+        priorities = {p["_id"]: p["count"] for p in priority_agg if p["_id"]}
 
         # Top reasons
         reason_agg = await db[self.COLLECTION].aggregate([
@@ -160,6 +178,7 @@ class RecoveryCandidateRepository:
             "recoverable_revenue": round(recoverable, 2),
             "average_ai_score": round(avg_score, 1),
             "top_segments": [{"segment": s["_id"], "count": s["count"]} for s in seg_agg if s["_id"]],
+            "priorities": priorities,
             "top_recovery_reasons": [r["_id"][:100] for r in reason_agg if r["_id"]],
         }
 

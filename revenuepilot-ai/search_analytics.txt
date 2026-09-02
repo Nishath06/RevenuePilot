@@ -1,0 +1,8 @@
+480: failed_val = sum(float(o.get("total_amount") or 0.0) for o in await get_failed_recovery_orders(limit=1000))
+481: cancelled_val = sum(float(o.get("total_amount") or 0.0) for o in await get_cancelled_recovery_orders(limit=1000))
+731: subtotal=float(d.get("subtotal") or 0.0),
+809: total_revenue = sum(o.get("total_amount", 0.0) for o in paid_docs)
+971: "amount": p.get("amount", order.get("total_amount", 1499.0)),
+988: "amount": o.get("total_amount", 1499.0),
+1148: val = c.get("subtotal", sum(i.get("price", 0) * i.get("quantity", 1) for i in items))
+1179: amt = f.get("amount", 0.0)

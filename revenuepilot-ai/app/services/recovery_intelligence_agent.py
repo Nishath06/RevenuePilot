@@ -16,6 +16,7 @@ import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.logging import get_logger
@@ -206,10 +207,31 @@ class RecoveryIntelligenceAgent:
                 return_exceptions=True,
             )
             for result in batch_results:
-                if isinstance(result, RecoveryCandidate) and result.recovery_score >= SCORE_THRESHOLD:
+                if isinstance(result, RecoveryCandidate) and result.status == "SCHEDULED":
                     approved.append(result)
 
-        # ── 3. Persist approved candidates ──────────────────────────────────
+        # ── 3. Schedule Campaign ─────────────────────────────────────────────
+        campaign_id = f"camp_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        
+        # Calculate schedule time
+        tz_str = getattr(settings, "RECOVERY_TIMEZONE", "Asia/Kolkata")
+        tz = ZoneInfo(tz_str)
+        now_tz = datetime.now(tz)
+        target_hour = int(getattr(settings, "RECOVERY_CAMPAIGN_HOUR", 18))
+        target_minute = int(getattr(settings, "RECOVERY_CAMPAIGN_MINUTE", 0))
+        
+        scheduled_time = now_tz.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+        if now_tz > scheduled_time:
+            scheduled_time = scheduled_time + timedelta(days=1)
+            
+        scheduled_time_iso = scheduled_time.isoformat()
+        
+        for cand in approved:
+            cand.campaign_id = campaign_id
+            cand.scheduled_send_time = scheduled_time_iso
+            cand.timezone = tz_str
+
+        # ── 4. Persist approved candidates ──────────────────────────────────
         inserted = await self.repo.upsert_candidates(approved, merchant_id)
         _emit_cloudwatch("CandidatesApproved", float(inserted))
         _emit_cloudwatch("CouponGenerated", float(inserted))
@@ -217,7 +239,7 @@ class RecoveryIntelligenceAgent:
         recoverable = sum(c.recoverable_revenue for c in approved)
         _emit_cloudwatch("RecoverableRevenue", recoverable, unit="None")
 
-        # ── 4. Publish EventBridge event ─────────────────────────────────────
+        # ── 5. Publish EventBridge event ─────────────────────────────────────
         elapsed_ms = round((time.perf_counter() - start_ts) * 1000, 2)
         event_detail = {
             "trace_id": trace_id,
@@ -250,6 +272,26 @@ class RecoveryIntelligenceAgent:
             })
         except Exception:
             pass
+            
+        # ── 6. Create Campaign Summary ───────────────────────────────────────
+        critical = sum(1 for c in approved if c.priority == "CRITICAL")
+        high = sum(1 for c in approved if c.priority == "HIGH")
+        medium = sum(1 for c in approved if c.priority == "MEDIUM")
+        
+        campaign_summary = {
+            "campaign_id": campaign_id,
+            "merchant_id": merchant_id,
+            "customers_analyzed": len(customers),
+            "candidates_created": inserted,
+            "critical": critical,
+            "high": high,
+            "medium": medium,
+            "recoverable_revenue": round(recoverable, 2),
+            "scheduled_send_time": scheduled_time_iso,
+            "status": "SCHEDULED",
+        }
+        
+        await self.repo.create_campaign_run(campaign_summary)
 
         logger.info(
             "RecoveryIntelligenceAgent completed",
@@ -258,16 +300,19 @@ class RecoveryIntelligenceAgent:
             recoverable_revenue=recoverable,
             elapsed_ms=elapsed_ms,
             trace_id=trace_id,
+            campaign_id=campaign_id,
         )
 
         return {
-            "status": "SUCCESS",
-            "trace_id": trace_id,
-            "merchant_id": merchant_id,
+            "success": True,
+            "campaign_id": campaign_id,
             "customers_analyzed": len(customers),
-            "candidates_approved": inserted,
+            "candidates_created": inserted,
+            "critical": critical,
+            "high": high,
+            "medium": medium,
             "recoverable_revenue": round(recoverable, 2),
-            "elapsed_ms": elapsed_ms,
+            "scheduled_send_time": scheduled_time_iso
         }
 
     # ── Customer Fetching ──────────────────────────────────────────────────────

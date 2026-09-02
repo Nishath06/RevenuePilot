@@ -108,9 +108,9 @@ export const CustomersPage: React.FC = () => {
                       </div>
                       {c.name || `Customer ${i+1}`}
                     </td>
-                    <td className="px-5 py-3.5 text-slate-300 font-medium">{c.orders_count} orders</td>
+                    <td className="px-5 py-3.5 text-slate-300 font-medium">{c.total_orders} orders</td>
                     <td className="px-5 py-3.5 font-extrabold text-emerald-400">{fmt(c.total_spent)}</td>
-                    <td className="px-5 py-3.5 text-slate-300 font-semibold">{fmt(c.avg_order_spend || (c.total_spent / (c.orders_count || 1)))}</td>
+                    <td className="px-5 py-3.5 text-slate-300 font-semibold">{fmt(c.avg_order_spend || (c.total_spent / (c.total_orders || 1)))}</td>
                     <td className="px-5 py-3.5">{getSegmentBadge(c.total_spent)}</td>
                   </tr>
                 ))}

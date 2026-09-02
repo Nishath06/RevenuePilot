@@ -33,8 +33,57 @@ async def get_prompts(_: str = Depends(verify_api_key)) -> PromptsResponse:
     summary="Get revenue recovery opportunities",
     description="Returns abandoned carts, failed payments, and AI-generated recovery messages.",
 )
-async def get_recovery(_: str = Depends(verify_api_key)) -> RecoveryResponse:
-    return await merchant_service.get_recovery_data()
+async def get_recovery(period: str = "all", _: str = Depends(verify_api_key)) -> RecoveryResponse:
+    return await merchant_service.get_recovery_data(period)
+
+
+@router.post(
+    "/recovery/send-email/{candidate_id}",
+    summary="Send personalized recovery email to candidate",
+)
+async def send_candidate_email(candidate_id: str, _: str = Depends(verify_api_key)) -> dict:
+    return await merchant_service.send_candidate_email(candidate_id)
+
+
+@router.post(
+    "/recovery/send-sms/{candidate_id}",
+    summary="Send personalized recovery SMS to candidate",
+)
+async def send_candidate_sms(candidate_id: str, _: str = Depends(verify_api_key)) -> dict:
+    return await merchant_service.send_candidate_sms(candidate_id)
+
+
+@router.post(
+    "/recovery/send-both/{candidate_id}",
+    summary="Send multi-channel recovery (Email + SMS) to candidate",
+)
+async def send_candidate_both(candidate_id: str, _: str = Depends(verify_api_key)) -> dict:
+    return await merchant_service.send_candidate_both(candidate_id)
+
+
+@router.post(
+    "/recovery/skip/{candidate_id}",
+    summary="Skip recovery for candidate",
+)
+async def skip_candidate(candidate_id: str, _: str = Depends(verify_api_key)) -> dict:
+    return await merchant_service.skip_candidate(candidate_id)
+
+
+@router.patch(
+    "/recovery/message/{candidate_id}",
+    summary="Update edited email/SMS templates or notes for candidate",
+)
+async def update_candidate_message(candidate_id: str, payload: dict, _: str = Depends(verify_api_key)) -> dict:
+    return await merchant_service.update_candidate_message(candidate_id, payload)
+
+
+@router.get(
+    "/recovery/history/{candidate_id}",
+    summary="Get recovery timeline history for candidate",
+)
+async def get_candidate_history(candidate_id: str, _: str = Depends(verify_api_key)) -> dict:
+    return await merchant_service.get_candidate_history(candidate_id)
+
 
 
 @router.get(

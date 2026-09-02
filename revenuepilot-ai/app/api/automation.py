@@ -917,10 +917,10 @@ async def recovery_campaign_history(
 ):
     """
     RECOVERY AI — GET /automation/recovery/history
-    Returns dispatched campaign history from `recovery_campaigns` collection.
+    Returns dispatched campaign history from `campaign_runs` collection.
     """
     db = get_mongodb()
-    cursor = db.recovery_campaigns.find(
+    cursor = db.campaign_runs.find(
         {"merchant_id": merchant_id}, {"_id": 0}
     ).sort("created_at", -1).limit(limit)
     campaigns = await cursor.to_list(length=limit)
@@ -932,26 +932,28 @@ async def recovery_campaign_history(
 async def recovery_ai_analytics(merchant_id: str = "merch_default"):
     """
     RECOVERY AI — GET /automation/recovery/insights
-    Returns AI dashboard metrics:
-    customers analyzed, approved candidates, recoverable revenue,
-    AI confidence average, top segments, top recovery reasons.
-
-    Example:
-    {
-      "customers_analyzed": 650,
-      "approved_candidates": 42,
-      "recoverable_revenue": 182450,
-      "average_ai_score": 91.3,
-      "top_reason": "Gateway timeout on high-value cart"
-    }
+    Returns AI dashboard metrics.
     """
     analytics = await _recovery_repo.get_analytics(merchant_id=merchant_id)
+    
+    # Also fetch the latest campaign from campaign_runs
+    db = get_mongodb()
+    today_campaign = await db.campaign_runs.find_one(
+        {"merchant_id": merchant_id}, sort=[("created_at", -1)], projection={"_id": 0}
+    )
 
-    # Add top_reason convenience field
-    reasons = analytics.get("top_recovery_reasons", [])
-    analytics["top_reason"] = reasons[0] if reasons else "No candidates analyzed yet"
-
-    return analytics
+    # Format the response to match v4.1 frontend expectations
+    priorities = analytics.get("priorities", {})
+    return {
+        "today_campaign": today_campaign,
+        "scheduled_customers": analytics.get("approved_candidates", 0),
+        "recoverable_revenue": analytics.get("recoverable_revenue", 0.0),
+        "critical": priorities.get("CRITICAL", 0),
+        "high": priorities.get("HIGH", 0),
+        "medium": priorities.get("MEDIUM", 0),
+        "average_score": analytics.get("average_ai_score", 0.0),
+        "segments": {s["segment"]: s["count"] for s in analytics.get("top_segments", [])}
+    }
 
 
 @router.post("/recovery/approve/{candidate_id}")

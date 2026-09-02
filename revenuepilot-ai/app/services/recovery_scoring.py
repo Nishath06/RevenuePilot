@@ -82,7 +82,9 @@ class RecoveryCandidate:
     status: str = "PENDING_AI_REVIEW"
     created_at: str = ""
     expires_at: str = ""
-    scheduled_send_time: str = "18:00 IST"
+    scheduled_send_time: str = ""
+    timezone: str = "Asia/Kolkata"
+    campaign_id: str = ""
     trace_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -345,9 +347,11 @@ def score_candidate(
         whatsapp_message=str(llm_decision.get("whatsapp_message", "")),
         segment=segment,
         llm_model=getattr(__import__("app.core.config", fromlist=["settings"]).settings, "GEMINI_MODEL", "local-sim"),
-        status="APPROVED" if score >= SCORE_THRESHOLD else "PENDING_AI_REVIEW",
+        status="SCHEDULED" if score >= SCORE_THRESHOLD else "PENDING_AI_REVIEW",
         expires_at=coupon_data["expires_at"],
-        scheduled_send_time=str(llm_decision.get("best_send_time", "18:00 IST")),
+        scheduled_send_time="",
+        timezone="Asia/Kolkata",
+        campaign_id="",
     )
 
 

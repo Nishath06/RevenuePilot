@@ -53,7 +53,7 @@ export const aiAPI = {
   payments: () => aiClient.get('/insights/payments'),
   inventory: () => aiClient.get('/insights/inventory'),
   customers: () => aiClient.get('/insights/customers'),
-  recovery: () => aiClient.get('/merchant/recovery'),
+  recovery: (period: string = 'all') => aiClient.get('/merchant/recovery', { params: { period } }),
   events: () => aiClient.get('/merchant/events'),
   prompts: () => aiClient.get('/merchant/prompts'),
   chat: (message: string) => aiClient.post('/chat', { message }),
@@ -67,6 +67,14 @@ export const aiAPI = {
   forecastMetrics: () => aiClient.get('/merchant/forecast'),
   incidentMetrics: () => aiClient.get('/merchant/incidents'),
   webhookMetrics: () => aiClient.get('/merchant/webhooks'),
+
+  // Candidate Manual Recovery Endpoints
+  sendEmail: (candidateId: string) => aiClient.post(`/merchant/recovery/send-email/${candidateId}`),
+  sendSMS: (candidateId: string) => aiClient.post(`/merchant/recovery/send-sms/${candidateId}`),
+  sendBoth: (candidateId: string) => aiClient.post(`/merchant/recovery/send-both/${candidateId}`),
+  skip: (candidateId: string) => aiClient.post(`/merchant/recovery/skip/${candidateId}`),
+  updateMessage: (candidateId: string, payload: any) => aiClient.patch(`/merchant/recovery/message/${candidateId}`, payload),
+  getHistory: (candidateId: string) => aiClient.get(`/merchant/recovery/history/${candidateId}`),
 };
 
 // ─── AutoOps Automation APIs ──────────────────────────────────────────────────

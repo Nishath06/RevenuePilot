@@ -216,7 +216,7 @@ class TestRecoveryScoring:
         f = _make_features()
         decision = _make_llm_decision(recovery_probability=75)
         c = score_candidate("cust_001", "merch_default", f, "AT_RISK", decision, {})
-        assert c.status == "APPROVED"
+        assert c.status == "SCHEDULED"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -418,6 +418,8 @@ class TestAgentEndToEnd:
             patch.object(agent, "_fetch_recovery_candidates", new_callable=AsyncMock) as mock_fetch,
             patch.object(agent, "_process_customer", new_callable=AsyncMock) as mock_process,
             patch.object(agent.repo, "upsert_candidates", new_callable=AsyncMock) as mock_upsert,
+            patch.object(agent.repo, "create_campaign_run", new_callable=AsyncMock) as mock_create_run,
+            patch.object(agent.repo, "create_campaign_run", new_callable=AsyncMock) as mock_create_run,
             patch("app.services.recovery_intelligence_agent.aws_manager"),
         ):
             mock_get_db.return_value = AsyncMock()
@@ -439,14 +441,14 @@ class TestAgentEndToEnd:
             mock_process.side_effect = [
                 _make_mock_cand(85),
                 _make_mock_cand(92),
-                _make_mock_cand(55),  # Below threshold — filtered out
+                _make_mock_cand(55),
             ]
             mock_upsert.return_value = 2
 
             result = await agent.run(merchant_id="merch_default")
 
-        assert result["status"] == "SUCCESS"
+        assert result["success"] is True
         assert result["customers_analyzed"] == 3
-        assert result["candidates_approved"] == 2
+        assert result["candidates_created"] == 2
         assert "recoverable_revenue" in result
-        assert "elapsed_ms" in result
+        assert "campaign_id" in result
