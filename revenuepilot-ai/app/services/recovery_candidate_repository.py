@@ -150,7 +150,11 @@ class RecoveryCandidateRepository:
         if merchant_id and merchant_id != "all":
             query["merchant_id"] = merchant_id
         if status and status != "all":
-            query["$or"] = [{"status": status}, {"recovery_status": status}]
+            if status.upper() in ("SCHEDULED", "APPROVED"):
+                query["status"] = {"$in": ["SCHEDULED", "scheduled", "APPROVED"]}
+                query["recovery_status"] = {"$nin": ["DISPATCHED", "EMAIL_SENT", "SMS_SENT", "EMAIL+SMS_SENT", "FAILED", "SKIPPED", "RECOVERED"]}
+            else:
+                query["$or"] = [{"status": status}, {"recovery_status": status}]
         if priority and priority != "all":
             query["priority"] = priority.upper()
         if segment and segment != "all":

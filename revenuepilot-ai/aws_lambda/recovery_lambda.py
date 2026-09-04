@@ -537,6 +537,7 @@ def dispatch_candidate(
         try:
             set_doc: Dict[str, Any] = {
                 "status": final_status,
+                "recovery_status": final_status,
                 "last_action": last_action,
                 "dispatched_at": now_iso_utc,
                 "updated_at": now_iso_utc,
@@ -699,19 +700,10 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
                     "trace_id": trace_id,
                 }))
         else:
-            # Batch: all SCHEDULED candidates due by now (IST)
+            # Batch: all SCHEDULED/APPROVED candidates ready for dispatch
             cand_filter: Dict[str, Any] = {
-                "status": {"$in": ["SCHEDULED", "scheduled"]},
-                "recovery_status": {"$ne": "RECOVERED"},
-                "$or": [
-                    {"scheduled_send_time": {"$lte": now_iso_ist}},
-                    {"scheduled_send_time": {"$lte": now_iso_utc}},
-                    {"scheduled_send_time": {"$lte": now_utc}},
-                    {"scheduled_send_time": {"$lte": now_ist}},
-                    {"scheduled_send_time": ""},
-                    {"scheduled_send_time": None},
-                    {"scheduled_send_time": {"$exists": False}},
-                ],
+                "status": {"$in": ["SCHEDULED", "scheduled", "APPROVED"]},
+                "recovery_status": {"$nin": ["DISPATCHED", "EMAIL_SENT", "SMS_SENT", "EMAIL+SMS_SENT", "FAILED", "SKIPPED", "RECOVERED"]},
             }
             if merchant_id and merchant_id != "all":
                 cand_filter["merchant_id"] = merchant_id

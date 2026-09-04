@@ -45,7 +45,7 @@ class AWSClientManager:
             and not self.access_key.startswith("sk-")
             and not self.access_key.startswith("your-")
         )
-        self.is_local_mode = not BOTO3_AVAILABLE or self.mode not in _cloud_aliases or not self.has_credentials
+        self.is_local_mode = not BOTO3_AVAILABLE or not self.has_credentials
 
         self._session = None
         self._events_client = None

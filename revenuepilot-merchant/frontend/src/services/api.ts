@@ -70,6 +70,10 @@ export const aiAPI = {
 
   // Candidate Manual Recovery Endpoints
   analyzeRecovery: (params?: any) => aiClient.post('/automation/recovery/analyze', params || {}),
+  getScheduledCandidates: (params?: { merchant_id?: string; status?: string }) =>
+    aiClient.get('/automation/recovery/candidates', { params: { status: 'SCHEDULED', ...params } }),
+  runRecoveryLambda: (payload?: { merchant_id?: string; trace_id?: string }) =>
+    aiClient.post('/automation/recovery/run-approved', payload || {}),
   sendEmail: (candidateId: string) => aiClient.post(`/merchant/recovery/send-email/${candidateId}`),
   sendSMS: (candidateId: string) => aiClient.post(`/merchant/recovery/send-sms/${candidateId}`),
   sendBoth: (candidateId: string) => aiClient.post(`/merchant/recovery/send-both/${candidateId}`),

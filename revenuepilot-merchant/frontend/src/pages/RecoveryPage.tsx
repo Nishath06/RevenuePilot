@@ -5,7 +5,8 @@ import {
   ShoppingBag, Zap, Copy, Check, Send, AlertTriangle, XCircle,
   RotateCcw, MessageSquare, Mail, Search, Filter, Download,
   CheckSquare, Square, Eye, Clock, CheckCircle2, User, Phone,
-  Percent, Award, ShieldAlert, Sparkles, X, Save, FileText
+  Percent, Award, ShieldAlert, Sparkles, X, Save, FileText,
+  CalendarCheck
 } from 'lucide-react';
 import { aiAPI } from '../services/api';
 import toast from 'react-hot-toast';
@@ -42,6 +43,56 @@ export const RecoveryPage: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
 
+  // Scheduled Recovery Modal & Lambda Execution State
+  const [showScheduledModal, setShowScheduledModal] = useState(false);
+  const [scheduledCandidates, setScheduledCandidates] = useState<any[]>([]);
+  const [scheduledCount, setScheduledCount] = useState<number>(0);
+  const [loadingScheduled, setLoadingScheduled] = useState(false);
+  const [runningLambda, setRunningLambda] = useState(false);
+  const [scheduledSearch, setScheduledSearch] = useState('');
+
+  const fetchScheduledCandidates = async () => {
+    setLoadingScheduled(true);
+    try {
+      const res = await aiAPI.getScheduledCandidates();
+      const list = res.data?.candidates || [];
+      setScheduledCandidates(list);
+      setScheduledCount(list.length);
+    } catch (err) {
+      console.error('Failed to fetch scheduled candidates', err);
+      toast.error('Failed to load scheduled recovery candidates');
+    } finally {
+      setLoadingScheduled(false);
+    }
+  };
+
+  const openScheduledModal = () => {
+    setShowScheduledModal(true);
+    fetchScheduledCandidates();
+  };
+
+  const handleRunRecoveryLambda = async () => {
+    setRunningLambda(true);
+    const toastId = toast.loading('Invoking AWS RecoveryLambda for scheduled candidates...');
+    try {
+      const res = await aiAPI.runRecoveryLambda();
+      const output = res.data?.result?.output || res.data;
+      const count = output?.candidates_processed ?? (scheduledCandidates.length || 1);
+      const emails = output?.emails_sent ?? 0;
+      toast.success(
+        `RecoveryLambda executed successfully! Processed ${count} candidate(s), sent ${emails} email(s).`,
+        { id: toastId, duration: 6000 }
+      );
+      fetchScheduledCandidates();
+      fetchData();
+    } catch (err: any) {
+      console.error('RecoveryLambda error:', err);
+      toast.error('Failed to run RecoveryLambda: ' + (err.response?.data?.detail || err.message || 'Execution error'), { id: toastId });
+    } finally {
+      setRunningLambda(false);
+    }
+  };
+
   const handleAnalyzeCustomers = async () => {
     setAnalyzing(true);
     const toastId = toast.loading('Running Recovery Intelligence Agent (Gemini)...');
@@ -50,6 +101,7 @@ export const RecoveryPage: React.FC = () => {
       setAnalysisResult(res.data);
       toast.success('Customer analysis complete! Candidates scheduled.', { id: toastId });
       fetchData();
+      fetchScheduledCandidates();
     } catch (err: any) {
       console.error(err);
       toast.error('Failed to run customer analysis', { id: toastId });
@@ -67,11 +119,24 @@ export const RecoveryPage: React.FC = () => {
         toast.error('Failed to load recovery data');
       })
       .finally(() => setLoading(false));
+
+    aiAPI.getScheduledCandidates()
+      .then((r) => setScheduledCount(r.data?.count ?? (r.data?.candidates?.length || 0)))
+      .catch(() => {});
   };
 
   useEffect(() => {
     fetchData();
   }, [selectedPeriod]);
+
+  const filteredScheduled = scheduledCandidates.filter((cand: any) => {
+    if (!scheduledSearch.trim()) return true;
+    const q = scheduledSearch.toLowerCase();
+    const matchName = cand.customer_name?.toLowerCase().includes(q);
+    const matchEmail = cand.customer_email?.toLowerCase().includes(q);
+    const matchId = (cand.candidate_id || cand.order_id || '')?.toLowerCase().includes(q);
+    return matchName || matchEmail || matchId;
+  });
 
   const copy = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -333,6 +398,20 @@ export const RecoveryPage: React.FC = () => {
           >
             <Sparkles className={`w-4 h-4 ${analyzing ? 'animate-spin' : ''}`} />
             {analyzing ? 'Analyzing Customers...' : 'Analyze Customers'}
+          </button>
+
+          {/* Scheduled Recoveries Queue & Lambda Button */}
+          <button
+            onClick={openScheduledModal}
+            className="px-4 py-2.5 bg-[#162032] hover:bg-[#1E293B] text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/60 text-sm font-extrabold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <CalendarCheck className="w-4 h-4 text-emerald-400" />
+            Scheduled Recoveries
+            {scheduledCount > 0 && (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-300 font-mono font-black rounded-full border border-emerald-500/30">
+                {scheduledCount}
+              </span>
+            )}
           </button>
 
           {/* Feature 1 — Time Period Filter */}
@@ -1050,11 +1129,254 @@ export const RecoveryPage: React.FC = () => {
 
               <div className="pt-2 flex justify-end">
                 <button
-                  onClick={() => setAnalysisResult(null)}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition-colors shadow-lg shadow-emerald-600/30"
+                  onClick={() => {
+                    setAnalysisResult(null);
+                    openScheduledModal();
+                  }}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition-colors shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  View Scheduled Candidates
+                  <CalendarCheck className="w-5 h-5" />
+                  View Scheduled Candidates Queue
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Scheduled Candidates & RecoveryLambda Dispatch Modal */}
+        {showScheduledModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-[#0F172A] border border-[#1E293B] rounded-3xl max-w-5xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col justify-between text-white"
+            >
+              {/* Modal Header */}
+              <div className="p-6 bg-[#162032] border-b border-[#1E293B] flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-20">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      <CalendarCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                        Agent Scheduled Recovery Queue
+                        <span className="text-xs bg-emerald-500/20 text-emerald-300 font-mono font-black px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                          {scheduledCandidates.length} Candidates
+                        </span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Customers scheduled by Recovery Intelligence Agent in MongoDB ready for SES + SNS dispatch.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* RUN RECOVERY LAMBDA BUTTON */}
+                  <button
+                    onClick={handleRunRecoveryLambda}
+                    disabled={runningLambda || loadingScheduled || scheduledCandidates.length === 0}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {runningLambda ? (
+                      <RotateCcw className="w-4 h-4 animate-spin text-white" />
+                    ) : (
+                      <Zap className="w-4 h-4 fill-white text-white" />
+                    )}
+                    {runningLambda ? 'Running Lambda...' : 'Run RecoveryLambda Now'}
+                  </button>
+
+                  <button
+                    onClick={() => setShowScheduledModal(false)}
+                    className="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Toolbar & Stats */}
+              <div className="px-6 py-4 bg-[#111827] border-b border-[#1E293B] flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="relative w-full md:w-80">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Search scheduled customer name, email or ID..."
+                    value={scheduledSearch}
+                    onChange={(e) => setScheduledSearch(e.target.value)}
+                    className="w-full bg-[#1A2436] border border-[#1E293B] rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+
+                <div className="flex items-center gap-4 text-xs">
+                  <div className="px-3 py-1.5 bg-[#162032] border border-[#1E293B] rounded-xl text-slate-300">
+                    Total Recoverable:{' '}
+                    <strong className="text-emerald-400 font-extrabold">
+                      ₹
+                      {scheduledCandidates
+                        .reduce((acc, c) => acc + (c.recoverable_revenue || c.amount || 0), 0)
+                        .toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                  <button
+                    onClick={fetchScheduledCandidates}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${loadingScheduled ? 'animate-spin' : ''}`} />
+                    Refresh Queue
+                  </button>
+                </div>
+              </div>
+
+              {/* Scheduled Candidates List */}
+              <div className="p-6 overflow-y-auto space-y-4 max-h-[60vh]">
+                {loadingScheduled ? (
+                  <div className="space-y-3 animate-pulse">
+                    {[1, 2, 3].map((n) => (
+                      <div key={n} className="h-28 bg-[#162032] rounded-2xl border border-[#1E293B]" />
+                    ))}
+                  </div>
+                ) : filteredScheduled.length === 0 ? (
+                  <div className="text-center py-16 bg-[#162032]/40 rounded-2xl border border-[#1E293B] text-slate-400">
+                    <CalendarCheck className="w-12 h-12 mx-auto mb-3 text-slate-600" />
+                    <p className="font-bold text-sm text-slate-300">No scheduled recovery candidates found.</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Click <strong className="text-emerald-400">"Analyze Customers"</strong> in the dashboard to generate AI recovery candidates.
+                    </p>
+                  </div>
+                ) : (
+                  filteredScheduled.map((cand: any, idx: number) => {
+                    const cid = cand.candidate_id || cand.order_id || `cand-${idx}`;
+                    const amount = cand.recoverable_revenue || cand.amount || 0;
+                    const isCritical = cand.priority === 'CRITICAL';
+                    const isHigh = cand.priority === 'HIGH';
+
+                    return (
+                      <div
+                        key={cid}
+                        className="p-5 bg-[#162032] hover:bg-[#1C293F] border border-[#1E293B] rounded-2xl transition-all space-y-3"
+                      >
+                        {/* Top Info Bar */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-black text-sm">
+                              {cand.customer_name?.[0]?.toUpperCase() || 'C'}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-extrabold text-white text-sm">{cand.customer_name}</h4>
+                                <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                                  {cid}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+                                <span>{cand.customer_email || 'No Email'}</span>
+                                {cand.customer_phone && <span>• {cand.customer_phone}</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-start sm:self-auto">
+                            <span
+                              className={`text-[10px] font-black px-2.5 py-1 rounded-full border uppercase ${
+                                isCritical
+                                  ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                                  : isHigh
+                                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                  : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                              }`}
+                            >
+                              {cand.priority || 'MEDIUM'}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-1 bg-slate-800 text-slate-300 rounded-full uppercase border border-slate-700">
+                              {cand.segment || 'STANDARD'}
+                            </span>
+                            <span className="text-[10px] font-black px-2.5 py-1 bg-amber-500/10 text-amber-400 rounded-full uppercase border border-amber-500/20">
+                              {cand.status || 'SCHEDULED'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Details & Personalization Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-2 border-t border-[#1E293B]">
+                          {/* Financials & Signal */}
+                          <div className="p-3 bg-[#0F172A] rounded-xl border border-[#1E293B] space-y-1">
+                            <span className="text-slate-400 text-[11px]">Recoverable Amount</span>
+                            <div className="text-base font-black text-emerald-400">
+                              ₹{amount.toLocaleString('en-IN')}
+                            </div>
+                            <div className="text-[11px] text-slate-400 pt-1">
+                              Signal:{' '}
+                              <span className="text-amber-300 font-bold">
+                                {cand.trigger_signal || cand.failure_reason || cand.recovery_signal || 'PAYMENT_FAILED'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* AI Personalization & Coupon */}
+                          <div className="p-3 bg-[#0F172A] rounded-xl border border-[#1E293B] space-y-1">
+                            <div className="flex justify-between items-center text-[11px]">
+                              <span className="text-slate-400">AI Recovery Score</span>
+                              <span className="text-emerald-400 font-extrabold">
+                                {cand.recovery_score || 85}%
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-300 truncate">
+                              <strong>Subject:</strong> {cand.email_subject || 'Complete your transaction'}
+                            </div>
+                            {cand.coupon_code && (
+                              <div className="text-[11px] font-mono text-amber-400 font-bold">
+                                Coupon: {cand.coupon_code} ({cand.recommended_discount || 15}% OFF)
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action Channels */}
+                          <div className="p-3 bg-[#0F172A] rounded-xl border border-[#1E293B] flex flex-col justify-between">
+                            <div className="text-[11px] text-slate-400">
+                              Dispatch Channel:{' '}
+                              <strong className="text-teal-300">
+                                {cand.recommended_channel || cand.channel || 'EMAIL+SMS'}
+                              </strong>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-1">
+                              Scheduled:{' '}
+                              {cand.created_at
+                                ? new Date(cand.created_at).toLocaleString('en-IN')
+                                : 'Now'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-5 bg-[#162032] border-t border-[#1E293B] flex flex-col sm:flex-row items-center justify-between gap-3 sticky bottom-0 z-20">
+                <div className="text-xs text-slate-400">
+                  Showing <strong className="text-white">{filteredScheduled.length}</strong> of{' '}
+                  <strong className="text-white">{scheduledCandidates.length}</strong> scheduled candidates.
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    onClick={() => setShowScheduledModal(false)}
+                    className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleRunRecoveryLambda}
+                    disabled={runningLambda || loadingScheduled || scheduledCandidates.length === 0}
+                    className="w-full sm:w-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Dispatch RecoveryLambda
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

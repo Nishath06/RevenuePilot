@@ -145,14 +145,10 @@ class LambdaConfig:
         key_id: str = os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
         secret: str = os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
 
-        # CLOUD mode requires BOTH a real AWS_MODE value AND valid credentials.
-        # Accepted cloud aliases: "cloud", "aws", "production".
-        _cloud_aliases = {"cloud", "aws", "production", "prod"}
-        _has_creds = bool(key_id and secret and not key_id.startswith("your-"))
-        _cloud_mode_declared = raw_mode in _cloud_aliases
-
+        # Enable AWS Cloud mode if valid credentials are set
+        _has_creds = bool(key_id and secret and not key_id.startswith("your-") and not key_id.startswith("sk-"))
         self.aws_mode: str = raw_mode
-        self.is_local_mode: bool = not (_cloud_mode_declared and _has_creds)
+        self.is_local_mode: bool = not _has_creds if _has_creds else (raw_mode not in _cloud_aliases)
 
         self.aws_region: str = os.environ.get("AWS_REGION", "ap-south-1").strip()
         self.event_bus_name: str = os.environ.get("EVENTBRIDGE_BUS_NAME", "revenuepilot-event-bus").strip()
@@ -177,14 +173,15 @@ _boto3_clients: Dict[str, Any] = {}
 def get_boto3_client(service_name: str) -> Any:
     """
     Returns a lazy-initialized Boto3 client for AWS Cloud mode.
-    Returns None if in local simulation mode or if credentials/SDK are missing.
+    Returns None if SDK is missing or boto3 client creation fails.
     """
-    if config.is_local_mode or not HAS_BOTO3:
+    if not HAS_BOTO3:
         return None
 
-    if service_name not in _boto3_clients:
+    if service_name not in _boto3_clients or _boto3_clients[service_name] is None:
         try:
-            _boto3_clients[service_name] = boto3.client(service_name, region_name=config.aws_region)
+            region = config.aws_region or os.environ.get("AWS_REGION", "ap-south-1")
+            _boto3_clients[service_name] = boto3.client(service_name, region_name=region)
         except Exception as err:
             logger.warning(f"[AWS Boto3] Could not initialize {service_name} client: {err}")
             _boto3_clients[service_name] = None
