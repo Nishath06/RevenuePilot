@@ -139,6 +139,13 @@ class Settings(BaseSettings):
     # ── Notification / Email Target Settings ─────────────────────────────────
     NOTIFICATION_EMAIL: str = "jpnishath@gmail.com"
     TEST_EMAIL_RECIPIENT: str = "jpnishath@gmail.com"
+    SES_FROM_EMAIL: str = ""
+    SES_SENDER_EMAIL: str = ""
+    AWS_LAMBDA_RECOVERY_NAME: str = "RecoveryLambda"
+    AWS_LAMBDA_REPORTS_NAME: str = "ReportsLambda"
+    AWS_LAMBDA_INVENTORY_NAME: str = "InventoryLambda"
+    AWS_LAMBDA_INCIDENT_NAME: str = "IncidentLambda"
+    AWS_LAMBDA_CLOUDWATCH_NAME: str = "CloudWatchLambda"
 
     # ── Store Backend ─────────────────────────────────────────────────────────
     STORE_BACKEND_URL: str = "http://localhost:8000"
@@ -149,6 +156,59 @@ class Settings(BaseSettings):
     RECOVERY_TIMEZONE: str = "Asia/Kolkata"
 
     def validate_runtime_configuration(self) -> None:
+        """
+        Task 11 — Startup environment validation.
+        Logs startup mode banner and warns about any missing required variables.
+        Raises RuntimeError only for hard production requirements (JWT in prod).
+        """
+        import logging as _logging
+        _logger = _logging.getLogger("revenuepilot.startup")
+
+        # Determine cloud mode
+        key_id = (self.AWS_ACCESS_KEY_ID or "").strip()
+        secret = (self.AWS_SECRET_ACCESS_KEY or "").strip()
+        mode_raw = (self.AWS_MODE or "local").strip().lower()
+        cloud_aliases = {"cloud", "aws", "production", "prod"}
+        has_creds = bool(key_id and secret and not key_id.startswith("your-"))
+        is_cloud = has_creds and mode_raw in cloud_aliases
+
+        aws_mode_str = "CLOUD" if is_cloud else "LOCAL"
+        ses_email = (self.SES_FROM_EMAIL or self.SES_SENDER_EMAIL or "").strip()
+        ses_enabled = bool(ses_email and is_cloud)
+        sns_enabled = is_cloud
+
+        # ── Startup banner (Task 1 / Task 10) ─────────────────────────────────
+        _logger.info("=" * 60)
+        _logger.info(f"RevenuePilot AWS Mode: {aws_mode_str}")
+        _logger.info(f"SES Enabled: {ses_enabled}")
+        _logger.info(f"SNS Enabled: {sns_enabled}")
+        _logger.info(f"Local Simulation: {not is_cloud}")
+        _logger.info("=" * 60)
+
+        # ── Required variable validation ────────────────────────────────────────
+        missing: list[str] = []
+
+        if not (self.MONGODB_URL or "").strip():
+            missing.append("MONGODB_URL")
+        if not (self.DATABASE_NAME or "").strip():
+            missing.append("DATABASE_NAME")
+
+        if is_cloud:
+            if not key_id:
+                missing.append("AWS_ACCESS_KEY_ID")
+            if not secret:
+                missing.append("AWS_SECRET_ACCESS_KEY")
+            if not (self.AWS_REGION or "").strip():
+                missing.append("AWS_REGION")
+            if not ses_email:
+                missing.append("SES_FROM_EMAIL (or SES_SENDER_EMAIL)")
+
+        if missing:
+            _logger.warning(
+                f"[RevenuePilot Startup] Missing required environment variables: {', '.join(missing)}"
+            )
+
+        # ── Hard failure only for production JWT ────────────────────────────────
         if self.ENVIRONMENT.lower() in {"production", "staging"} and not self.JWT_SECRET:
             raise RuntimeError("JWT_SECRET is required in production")
 

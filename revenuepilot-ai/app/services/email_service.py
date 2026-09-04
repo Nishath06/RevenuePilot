@@ -1,6 +1,7 @@
 """
 RevenuePilot AI — Email Delivery Service
-Handles SMTP email sending, HTML/Text template rendering, and delivery logs.
+Handles SMTP email sending for TEST notifications only (/automation/email/send-test).
+Recovery emails are NEVER sent from this service — RecoveryLambda is the sole dispatch engine.
 """
 from __future__ import annotations
 
@@ -18,6 +19,11 @@ logger = get_logger(__name__)
 
 
 class EmailService:
+    """
+    SMTP email service — used ONLY for /automation/email/send-test.
+    Recovery campaign emails are dispatched exclusively by RecoveryLambda via SES.
+    """
+
     def __init__(self):
         self.smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
@@ -31,26 +37,33 @@ class EmailService:
         to_email: str,
         subject: str,
         body_text: str,
-        body_html: Optional[str] = None
+        body_html: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Sends an email via SMTP. Falls back to simulated log delivery if SMTP credentials are missing.
-        recipients = list(dict.fromkeys([r for r in [to_email, "jpnishath@gmail.com", "nishath2306@gmail.com"] if r and "@" in r]))
+        Sends a test notification email via SMTP.
+        Falls back to logged simulation if SMTP credentials are not configured.
+        NOT used for recovery campaign dispatch — see RecoveryLambda for SES dispatch.
+        """
+        recipients = list(dict.fromkeys(
+            r for r in [to_email, "jpnishath@gmail.com", "nishath2306@gmail.com"]
+            if r and "@" in r
+        ))
         if not recipients:
             return {"status": "error", "message": "No recipient email provided"}
 
         if not self.smtp_user or not self.smtp_password:
             logger.info(
-                "SMTP credentials not configured. Simulating email send.",
+                "SMTP credentials not configured. Simulating test email send.",
                 to=recipients,
-                subject=subject
+                subject=subject,
             )
             return {
                 "status": "simulated",
                 "to": recipients,
                 "subject": subject,
                 "delivered_at": datetime.now(timezone.utc).isoformat(),
-                "provider": "Local Simulation Mode (SMTP Not Configured)"
+                "provider": "Local Simulation Mode (SMTP Not Configured)",
+                "note": "Recovery emails are dispatched by RecoveryLambda via SES, not this endpoint.",
             }
 
         try:
@@ -73,23 +86,23 @@ class EmailService:
             server.sendmail(self.smtp_from, recipients, msg.as_string())
             server.quit()
 
-            logger.info("Email sent successfully via SMTP", to=recipients, subject=subject)
+            logger.info("Test email sent successfully via SMTP", to=recipients, subject=subject)
             return {
                 "status": "sent",
                 "to": recipients,
                 "subject": subject,
                 "delivered_at": datetime.now(timezone.utc).isoformat(),
-                "provider": f"SMTP ({self.smtp_host})"
+                "provider": f"SMTP ({self.smtp_host})",
             }
 
         except Exception as exc:
-            logger.error("Failed to send email via SMTP", error=str(exc), to=to_email)
+            logger.error("Failed to send test email via SMTP", error=str(exc), to=to_email)
             return {
                 "status": "failed",
                 "error": str(exc),
                 "to": to_email,
                 "subject": subject,
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
 

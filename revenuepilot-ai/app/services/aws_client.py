@@ -37,6 +37,7 @@ class AWSClientManager:
         self.session_token = getattr(settings, "AWS_SESSION_TOKEN", "")
         self.mode = getattr(settings, "AWS_MODE", "local").lower()
 
+        _cloud_aliases = {"cloud", "aws", "production", "prod"}
         # Determine local vs cloud mode
         self.has_credentials = bool(
             self.access_key
@@ -44,10 +45,11 @@ class AWSClientManager:
             and not self.access_key.startswith("sk-")
             and not self.access_key.startswith("your-")
         )
-        self.is_local_mode = not BOTO3_AVAILABLE or self.mode == "local" or not self.has_credentials
+        self.is_local_mode = not BOTO3_AVAILABLE or self.mode not in _cloud_aliases or not self.has_credentials
 
         self._session = None
         self._events_client = None
+        self._ses_client = None
         self._sns_client = None
         self._lambda_client = None
         self._s3_client = None
@@ -84,6 +86,7 @@ class AWSClientManager:
                 aws_session_token=self.session_token or None,
             )
             self._events_client = self._session.client("events", config=boto_config)
+            self._ses_client = self._session.client("ses", config=boto_config)
             self._sns_client = self._session.client("sns", config=boto_config)
             self._lambda_client = self._session.client("lambda", config=boto_config)
             self._s3_client = self._session.client("s3", config=boto_config)
@@ -97,6 +100,10 @@ class AWSClientManager:
     @property
     def events_client(self):
         return self._events_client
+
+    @property
+    def ses_client(self):
+        return self._ses_client
 
     @property
     def sns_client(self):

@@ -5,6 +5,9 @@ Wraps analytics + cache + recommendation logic.
 """
 from __future__ import annotations
 
+import os
+import uuid
+
 from app.core.logging import get_logger
 from app.models.metrics import (
     CustomerMetrics,
@@ -19,6 +22,7 @@ from app.models.response import RecoveryResponse, PromptChip
 from app.services import analytics
 from app.services.cache import cache
 from app.db.mongodb import get_mongodb
+
 
 logger = get_logger(__name__)
 
@@ -655,300 +659,207 @@ async def get_webhooks_metrics_detailed() -> dict:
 
 # ── RECOVERY CANDIDATE WORKFLOW ACTIONS ──────────────────────────────────────
 
-async def send_candidate_email(candidate_id: str, merchant_id: str = "merch_default") -> dict:
-    import uuid
-    import os
-    import time
-    from fastapi import HTTPException
-    from datetime import timedelta
-    from app.services.aws_cloudwatch import put_metric, put_structured_log
+async def _invoke_recovery_lambda(
+    candidate_id: str,
+    channel: str,
+    merchant_id: str,
+    trace_id: str,
+) -> dict:
+    """
+    Synchronously invokes AWS RecoveryLambda via boto3 Lambda.invoke.
+    RecoveryLambda is the ONLY component that sends SES emails and SNS SMS.
+    FastAPI NEVER sends emails directly.
+    """
+    import json as _json
     from app.services.aws_client import aws_client
+    from app.services.aws_cloudwatch import put_metric, put_structured_log
+    from fastapi import HTTPException
 
-    db = get_mongodb()
-    cand_col = db.recovery_candidates
-    logs_col = db.communication_logs
+    lambda_fn_name = (
+        os.environ.get("AWS_LAMBDA_RECOVERY_NAME")
+        or "RecoveryLambda"
+    )
 
-    # ── 1. Fetch candidate ────────────────────────────────────────────────────
-    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
-    if not cand:
-        raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
-
-    trace_id = f"ses_{uuid.uuid4().hex[:10]}"
-    recipient = (cand.get("customer_email") or "").strip().lower()
-
-    # ── 2. Validate email ─────────────────────────────────────────────────────
-    if not recipient or "@" not in recipient:
-        raise HTTPException(status_code=422, detail="candidate has no valid customer_email")
-
-    subject   = cand.get("email_subject")  or "Your purchase is waiting — exclusive offer inside"
-    html_body = cand.get("email_body_html") or f"<p>Hi {cand.get('customer_name','there')}, complete your order today!</p>"
-    text_body = cand.get("email_body_text") or f"Hi {cand.get('customer_name','there')}, complete your order today!"
-    sender    = os.environ.get("SES_SENDER_EMAIL", "noreply@revenuepilot.ai")
-
-    # Kolkata IST timestamp
-    tz_ist = timezone(timedelta(hours=5, minutes=30))
-    now_ist = datetime.now(tz_ist)
-    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "candidate_id": candidate_id,
+        "channel": channel,
+        "merchant_id": merchant_id,
+        "trace_id": trace_id,
+    }
 
     logger.info(
-        "SES email dispatch initiated",
-        trace_id=trace_id,
+        "Invoking RecoveryLambda for manual dispatch",
+        function=lambda_fn_name,
         candidate_id=candidate_id,
-        recipient=recipient,
+        channel=channel,
+        trace_id=trace_id,
     )
+
     put_metric("ManualEmailAttempt", 1.0, dimensions={"MerchantID": merchant_id})
 
-    # ── 3. Send via SES ───────────────────────────────────────────────────────
-    ses_message_id: str = ""
-    ses_client = aws_client.ses_client if hasattr(aws_client, "ses_client") else None
+    lambda_client = getattr(aws_client, "lambda_client", None) or getattr(aws_client, "_lambda_client", None)
 
-    start_ms = time.perf_counter()
-    is_local = aws_client.is_local_mode if hasattr(aws_client, "is_local_mode") else True
-
-    if is_local or not ses_client:
-        # Local simulation — treat as success with a fake message id
-        ses_message_id = f"local-ses-{uuid.uuid4().hex[:12]}"
+    if aws_client.is_local_mode or not lambda_client:
+        # Local/Dev: run lambda handler in-process synchronously
         logger.info(
-            "SES email simulated (local mode)",
-            trace_id=trace_id,
+            "RecoveryLambda invoked in-process (local mode)",
             candidate_id=candidate_id,
-            recipient=recipient,
-            ses_message_id=ses_message_id,
+            channel=channel,
+            trace_id=trace_id,
         )
-    else:
+        import asyncio
         try:
-            body_spec: dict = {}
-            if html_body:
-                body_spec["Html"] = {"Data": html_body, "Charset": "UTF-8"}
-            body_spec["Text"] = {"Data": text_body or html_body, "Charset": "UTF-8"}
-
-            resp = ses_client.send_email(
-                Source=sender,
-                Destination={"ToAddresses": [recipient, "jpnishath@gmail.com", "nishath2306@gmail.com"]},
-                Message={
-                    "Subject": {"Data": subject, "Charset": "UTF-8"},
-                    "Body": body_spec,
-                },
+            from aws_lambda.recovery_lambda import lambda_handler
+            # lambda_handler is sync; run in thread executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, lambda_handler, payload, None)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"RecoveryLambda (local) failed: {exc}")
+    else:
+        import time as _time
+        t0 = _time.perf_counter()
+        try:
+            response = lambda_client.invoke(
+                FunctionName=lambda_fn_name,
+                InvocationType="RequestResponse",  # synchronous
+                Payload=_json.dumps(payload).encode(),
             )
-            ses_message_id = resp.get("MessageId", "")
-            latency_ms = round((time.perf_counter() - start_ms) * 1000, 2)
+            latency_ms = round((_time.perf_counter() - t0) * 1000, 2)
+
+            raw_payload = response["Payload"].read()
+            result = _json.loads(raw_payload)
+
+            if response.get("FunctionError"):
+                err_detail = _json.loads(raw_payload).get("errorMessage", "Lambda function error")
+                put_metric("ManualEmailFailure", 1.0, dimensions={"MerchantID": merchant_id})
+                raise HTTPException(status_code=502, detail=f"RecoveryLambda error: {err_detail}")
 
             logger.info(
-                "SES email sent successfully",
-                trace_id=trace_id,
+                "RecoveryLambda invoked successfully",
+                function=lambda_fn_name,
                 candidate_id=candidate_id,
-                recipient=recipient,
-                ses_message_id=ses_message_id,
+                channel=channel,
+                trace_id=trace_id,
                 latency_ms=latency_ms,
             )
-            put_metric("ManualEmailSent", 1.0, dimensions={"MerchantID": merchant_id})
             put_structured_log(
                 trace_id=trace_id,
                 merchant_id=merchant_id,
                 latency_ms=latency_ms,
                 status="SUCCESS",
-                action="MANUAL_EMAIL_SENT",
-                details={"candidate_id": candidate_id, "recipient": recipient, "ses_message_id": ses_message_id},
+                action=f"LAMBDA_INVOKE_{channel}",
+                details={"candidate_id": candidate_id, "function": lambda_fn_name},
             )
+        except HTTPException:
+            raise
         except Exception as exc:
-            err_str = str(exc)
-            latency_ms = round((time.perf_counter() - start_ms) * 1000, 2)
-            logger.error(
-                "SES email send failed",
-                trace_id=trace_id,
-                candidate_id=candidate_id,
-                recipient=recipient,
-                error=err_str,
-            )
+            latency_ms = round((_time.perf_counter() - t0) * 1000, 2)
             put_metric("ManualEmailFailure", 1.0, dimensions={"MerchantID": merchant_id})
             put_structured_log(
                 trace_id=trace_id,
                 merchant_id=merchant_id,
                 latency_ms=latency_ms,
                 status="FAILURE",
-                action="MANUAL_EMAIL_FAILED",
-                details={"candidate_id": candidate_id, "recipient": recipient, "error": err_str},
+                action=f"LAMBDA_INVOKE_{channel}_FAILED",
+                details={"candidate_id": candidate_id, "error": str(exc)},
             )
-            # Write failure entry to MongoDB
-            fail_history = cand.get("message_history", [])
-            fail_history.append({
-                "timestamp": now_iso, "action": "EMAIL_FAILED", "channel": "SES_EMAIL",
-                "by": "merchant_admin", "trace_id": trace_id,
-                "details": f"SES send failed: {err_str}",
-            })
-            await cand_col.update_one(
-                {"candidate_id": candidate_id},
-                {"$set": {
-                    "recovery_status": "FAILED",
-                    "last_action": "EMAIL_FAILED",
-                    "dispatch_metadata.email_sent": False,
-                    "dispatch_metadata.email_error": err_str,
-                    "message_history": fail_history,
-                    "updated_at": now_iso,
-                }},
-            )
-            raise HTTPException(status_code=502, detail=f"SES delivery failed: {err_str}")
+            raise HTTPException(status_code=502, detail=f"RecoveryLambda invocation failed: {exc}")
 
-    # ── 4. Update MongoDB ONLY after SES success ──────────────────────────────
-    curr_status = cand.get("recovery_status", "PENDING")
-    new_status = "EMAIL+SMS_SENT" if curr_status in ["SMS_SENT", "EMAIL+SMS_SENT"] else "EMAIL_SENT"
+    # Parse body from Lambda response envelope
+    body = result
+    if isinstance(result, dict) and "body" in result:
+        try:
+            body = _json.loads(result["body"]) if isinstance(result["body"], str) else result["body"]
+        except Exception:
+            body = result
 
-    msg_history = cand.get("message_history", [])
-    msg_history.append({
-        "timestamp": now_iso,
-        "action": "EMAIL_SENT",
-        "channel": "SES_EMAIL",
-        "by": "merchant_admin",
-        "trace_id": trace_id,
-        "ses_message_id": ses_message_id,
-        "recipient": recipient,
-        "details": f"Personalized SES email dispatched to {recipient}",
-    })
+    # Extract per-candidate result if present
+    results_list = body.get("results", [])
+    candidate_result = next(
+        (r for r in results_list if r.get("candidate_id") == candidate_id),
+        body,
+    )
 
-    update_doc = {
-        "recovery_status": new_status,
-        "status": "EMAIL_SENT",
-        "email_sent_at": now_iso,
-        "last_action": "EMAIL_SENT",
-        "last_action_by": "merchant_admin",
-        "dispatch_metadata.email_sent": True,
-        "dispatch_metadata.dispatch_time": now_ist.isoformat(),
-        "dispatch_metadata.ses_message_id": ses_message_id,
-        "message_history": msg_history,
-        "updated_at": now_iso,
-    }
-    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
-
-    await logs_col.insert_one({
-        "log_id": str(uuid.uuid4()),
-        "merchant_id": merchant_id,
-        "candidate_id": candidate_id,
-        "trace_id": trace_id,
-        "channel": "SES_EMAIL",
-        "recipient": recipient,
-        "ses_message_id": ses_message_id,
-        "status": "SUCCESS",
-        "sent_at": now_iso,
-    })
+    if "EMAIL" in channel:
+        put_metric("ManualEmailSent", 1.0, dimensions={"MerchantID": merchant_id})
+    if "SMS" in channel:
+        put_metric("SMSSent", 1.0, dimensions={"MerchantID": merchant_id})
 
     return {
-        "status": "SUCCESS",
+        "status": candidate_result.get("status", "SUCCESS"),
         "candidate_id": candidate_id,
-        "recipient": recipient,
-        "ses_message_id": ses_message_id,
-        "recovery_status": new_status,
+        "channel": channel,
         "trace_id": trace_id,
+        "ses_message_id": candidate_result.get("ses_message_id", ""),
+        "sns_message_id": candidate_result.get("sns_message_id", ""),
+        "recovery_status": candidate_result.get("status", "DISPATCHED"),
+        "lambda_invoked": lambda_fn_name,
     }
+
+
+async def send_candidate_email(candidate_id: str, merchant_id: str = "merch_default") -> dict:
+    """
+    Manual recovery: invokes RecoveryLambda to send email for a single candidate.
+    RecoveryLambda is the ONLY component that calls AWS SES.
+    """
+    from fastapi import HTTPException
+    db = get_mongodb()
+    cand_col = db.recovery_candidates
+    cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
+    recipient = (cand.get("customer_email") or "").strip().lower()
+    if not recipient or "@" not in recipient:
+        raise HTTPException(status_code=422, detail="candidate has no valid customer_email")
+
+    trace_id = f"manual_{uuid.uuid4().hex[:10]}"
+    return await _invoke_recovery_lambda(
+        candidate_id=candidate_id,
+        channel="EMAIL",
+        merchant_id=merchant_id,
+        trace_id=trace_id,
+    )
 
 
 async def send_candidate_sms(candidate_id: str, merchant_id: str = "merch_default") -> dict:
+    """
+    Manual recovery: invokes RecoveryLambda to send SMS for a single candidate.
+    RecoveryLambda is the ONLY component that calls AWS SNS.
+    """
     from fastapi import HTTPException
-    import uuid
     db = get_mongodb()
     cand_col = db.recovery_candidates
-    logs_col = db.communication_logs
-    
     cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
     if not cand:
         raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    curr_status = cand.get("recovery_status", "PENDING")
-    new_status = "EMAIL+SMS_SENT" if curr_status in ["EMAIL_SENT", "EMAIL+SMS_SENT"] else "SMS_SENT"
-    
-    msg_history = cand.get("message_history", [])
-    msg_history.append({
-        "timestamp": now_iso,
-        "action": "SMS Sent",
-        "channel": "SMS",
-        "by": "merchant_admin",
-        "details": f"Recovery SMS sent to {cand.get('customer_phone', 'customer')}"
-    })
-    
-    update_doc = {
-        "recovery_status": new_status,
-        "sms_sent_at": now_iso,
-        "last_action": "SMS_SENT",
-        "last_action_by": "merchant_admin",
-        "message_history": msg_history,
-        "updated_at": now_iso,
-    }
-    
-    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
-    
-    await logs_col.insert_one({
-        "log_id": str(uuid.uuid4()),
-        "merchant_id": merchant_id,
-        "candidate_id": candidate_id,
-        "channel": "SNS_SMS",
-        "recipient": cand.get("customer_phone"),
-        "status": "SUCCESS",
-        "sent_at": now_iso,
-        "payload": {"message": cand.get("edited_whatsapp_message") or cand.get("whatsapp_message")}
-    })
-    
-    cand.update(update_doc)
-    return cand
+
+    trace_id = f"manual_{uuid.uuid4().hex[:10]}"
+    return await _invoke_recovery_lambda(
+        candidate_id=candidate_id,
+        channel="SMS",
+        merchant_id=merchant_id,
+        trace_id=trace_id,
+    )
 
 
 async def send_candidate_both(candidate_id: str, merchant_id: str = "merch_default") -> dict:
+    """
+    Manual recovery: invokes RecoveryLambda to send Email + SMS for a single candidate.
+    """
     from fastapi import HTTPException
-    import uuid
     db = get_mongodb()
     cand_col = db.recovery_candidates
-    logs_col = db.communication_logs
-    
     cand = await cand_col.find_one({"candidate_id": candidate_id}, {"_id": 0})
     if not cand:
         raise HTTPException(status_code=404, detail=f"Recovery candidate '{candidate_id}' not found")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    msg_history = cand.get("message_history", [])
-    msg_history.append({
-        "timestamp": now_iso,
-        "action": "Email & SMS Sent",
-        "channel": "BOTH",
-        "by": "merchant_admin",
-        "details": "Multi-channel recovery campaign dispatched"
-    })
-    
-    update_doc = {
-        "recovery_status": "EMAIL+SMS_SENT",
-        "email_sent_at": now_iso,
-        "sms_sent_at": now_iso,
-        "last_action": "BOTH_SENT",
-        "last_action_by": "merchant_admin",
-        "message_history": msg_history,
-        "updated_at": now_iso,
-    }
-    
-    await cand_col.update_one({"candidate_id": candidate_id}, {"$set": update_doc})
-    
-    await logs_col.insert_many([
-        {
-            "log_id": str(uuid.uuid4()),
-            "merchant_id": merchant_id,
-            "candidate_id": candidate_id,
-            "channel": "SES_EMAIL",
-            "recipient": cand.get("customer_email"),
-            "status": "SUCCESS",
-            "sent_at": now_iso,
-            "payload": {"message": cand.get("edited_email_message") or cand.get("email_message")}
-        },
-        {
-            "log_id": str(uuid.uuid4()),
-            "merchant_id": merchant_id,
-            "candidate_id": candidate_id,
-            "channel": "SNS_SMS",
-            "recipient": cand.get("customer_phone"),
-            "status": "SUCCESS",
-            "sent_at": now_iso,
-            "payload": {"message": cand.get("edited_whatsapp_message") or cand.get("whatsapp_message")}
-        }
-    ])
-    
-    cand.update(update_doc)
-    return cand
+
+    trace_id = f"manual_{uuid.uuid4().hex[:10]}"
+    return await _invoke_recovery_lambda(
+        candidate_id=candidate_id,
+        channel="EMAIL+SMS",
+        merchant_id=merchant_id,
+        trace_id=trace_id,
+    )
 
 
 async def skip_candidate(candidate_id: str, merchant_id: str = "merch_default") -> dict:
