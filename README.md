@@ -151,42 +151,42 @@ Online merchants lose **15% to 30% of gross merchandise value (GMV)** to payment
 ```mermaid
 flowchart TD
     subgraph Client Layer ["Merchant Portal & Customer Touchpoints"]
-        Merchant[Merchant Dashboard / React App]
-        Customer[Customer Checkout / Razorpay]
+        Merchant["Merchant Dashboard / React App"]
+        Customer["Customer Checkout / Razorpay"]
     end
 
     subgraph Data & Signal Ingestion ["1. Signal Capture"]
-        Customer -->|Payment Failure / Abandoned Cart| Webhook[Razorpay Webhook Listener]
-        Webhook -->|Insert Transaction Logs| MongoDB[(MongoDB Atlas Cluster)]
+        Customer -->|"Payment Failure / Abandoned Cart"| Webhook["Razorpay Webhook Listener"]
+        Webhook -->|"Insert Transaction Logs"| MongoDB[("MongoDB Atlas Cluster")]
     end
 
     subgraph AI Intelligence Layer ["2. Gemini 3.5 Flash AI Engine"]
-        Merchant -->|Click 'Analyze Customers'| FastAPI[FastAPI Backend Server]
-        FastAPI -->|Query Unrecovered Signals| MongoDB
-        FastAPI -->|Extract Behavioral Features| FeatureEng[Feature Extraction Engine]
-        FeatureEng -->|Build Personalization Prompt| GeminiPrompt[Gemini Prompt Builder]
-        GeminiPrompt -->|Async Semaphore (3)| GeminiAI[Google Gemini 3.5 Flash API]
-        GeminiAI -->|Return Score + Dynamic Coupon + HTML/SMS| FastAPI
-        FastAPI -->|Persist Candidates status=SCHEDULED| MongoDB
+        Merchant -->|"Click 'Analyze Customers'"| FastAPI["FastAPI Backend Server"]
+        FastAPI -->|"Query Unrecovered Signals"| MongoDB
+        FastAPI -->|"Extract Behavioral Features"| FeatureEng["Feature Extraction Engine"]
+        FeatureEng -->|"Build Personalization Prompt"| GeminiPrompt["Gemini Prompt Builder"]
+        GeminiPrompt -->|"Async Semaphore (3)"| GeminiAI["Google Gemini 3.5 Flash API"]
+        GeminiAI -->|"Return Score + Dynamic Coupon + HTML/SMS"| FastAPI
+        FastAPI -->|"Persist Candidates (status=SCHEDULED)"| MongoDB
     end
 
     subgraph AWS Serverless Infrastructure ["3. AWS Cloud Execution Engine"]
-        EventBridge[AWS EventBridge Cron 18:00 IST] -->|Automated Trigger| RecoveryLambda[AWS RecoveryLambda]
-        Merchant -->|Click 'Run RecoveryLambda Now'| FastAPI
-        FastAPI -->|POST /automation/recovery/run-approved| RecoveryLambda
+        EventBridge["AWS EventBridge Cron 18:00 IST"] -->|"Automated Trigger"| RecoveryLambda["AWS RecoveryLambda"]
+        Merchant -->|"Click 'Run RecoveryLambda Now'"| FastAPI
+        FastAPI -->|"POST /automation/recovery/run-approved"| RecoveryLambda
         
-        RecoveryLambda -->|Read SCHEDULED Candidates| MongoDB
-        RecoveryLambda -->|Send Dynamic HTML Email| SES[Amazon SES]
-        RecoveryLambda -->|Send Instant SMS Alert| SNS[Amazon SNS]
-        RecoveryLambda -->|Publish Execution Metrics| CloudWatch[AWS CloudWatch]
+        RecoveryLambda -->|"Read SCHEDULED Candidates"| MongoDB
+        RecoveryLambda -->|"Send Dynamic HTML Email"| SES["Amazon SES"]
+        RecoveryLambda -->|"Send Instant SMS Alert"| SNS["Amazon SNS"]
+        RecoveryLambda -->|"Publish Execution Metrics"| CloudWatch["AWS CloudWatch"]
     end
 
     subgraph Status & Telemetry ["4. Status Synchronization"]
-        RecoveryLambda -->|Update status=DISPATCHED & recovery_status=EMAIL_SENT| MongoDB
-        SES -->|Deliver Email with Coupon| CustomerInbox[Customer Gmail Inbox]
-        SNS -->|Deliver SMS Alert| CustomerPhone[Customer Mobile Device]
-        CloudWatch -->|Log Telemetry & Latency| CWLogs[CloudWatch Logs / AutoOps]
-        FastAPI -->|Fetch Refreshed Status| Merchant
+        RecoveryLambda -->|"Update status=DISPATCHED & recovery_status=EMAIL_SENT"| MongoDB
+        SES -->|"Deliver Email with Coupon"| CustomerInbox["Customer Gmail Inbox"]
+        SNS -->|"Deliver SMS Alert"| CustomerPhone["Customer Mobile Device"]
+        CloudWatch -->|"Log Telemetry & Latency"| CWLogs["CloudWatch Logs / AutoOps"]
+        FastAPI -->|"Fetch Refreshed Status"| Merchant
     end
 
     style GeminiAI fill:#4285F4,stroke:#333,stroke-width:2px,color:#fff

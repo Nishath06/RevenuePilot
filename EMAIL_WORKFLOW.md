@@ -13,19 +13,19 @@ RevenuePilot automatically detects payment failures, cancelled orders, and aband
 
 ```mermaid
 flowchart TD
-    A[Customer Action / Event\nPayment Failure / Abandoned Cart] --> B[EventBridge / MongoDB Event Log]
-    B --> C[Recovery Intelligence Agent\nGemini 1.5/2.0 Engine]
-    C --> D{Score >= 60?}
-    D -- No --> E[Ignore Candidate]
-    D -- Yes --> F[Generate Personalized HTML & Text Email\nAssign Segment & Coupon]
-    F --> G[Save Candidate to MongoDB\nStatus: SCHEDULED @ 6:00 PM IST]
-    G --> H[EventBridge Cron Trigger / Manual Trigger]
-    H --> I[AWS Recovery Lambda / Local Dispatch]
-    I --> J{Mode}
-    J -- Cloud Mode --> K[AWS SES Email Dispatch + SNS SMS]
-    J -- Local / Dev Mode --> L[SMTP Email Service / Simulation Log]
-    K & L --> M[Update MongoDB & Communication Logs\nStatus: DISPATCHED]
-    M --> N[Publish CloudWatch Telemetry Metrics\nEmailsSent, DispatchFailures, Latency]
+    A["Customer Action / Event\nPayment Failure / Abandoned Cart"] --> B["EventBridge / MongoDB Event Log"]
+    B --> C["Recovery Intelligence Agent\nGemini 1.5/2.0 Engine"]
+    C --> D{"Score >= 60?"}
+    D -- "No" --> E["Ignore Candidate"]
+    D -- "Yes" --> F["Generate Personalized HTML & Text Email\nAssign Segment & Coupon"]
+    F --> G["Save Candidate to MongoDB\nStatus: SCHEDULED @ 6:00 PM IST"]
+    G --> H["EventBridge Cron Trigger / Manual Trigger"]
+    H --> I["AWS Recovery Lambda / Local Dispatch"]
+    I --> J{"Mode"}
+    J -- "Cloud Mode" --> K["AWS SES Email Dispatch + SNS SMS"]
+    J -- "Local / Dev Mode" --> L["SMTP Email Service / Simulation Log"]
+    K & L --> M["Update MongoDB & Communication Logs\nStatus: DISPATCHED"]
+    M --> N["Publish CloudWatch Telemetry Metrics\nEmailsSent, DispatchFailures, Latency"]
 ```
 
 ---
