@@ -1,64 +1,60 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/revenuepilot_logo.png" alt="RevenuePilot Logo" width="220" />
+  <img src="docs/images/hero-banner.png" alt="RevenuePilot Hero Banner" width="100%" />
 </p>
 
-<h1 align="center">RevenuePilot v4.2 — Autonomous AI Revenue Recovery Platform</h1>
+<h1 align="center">⚡ RevenuePilot v4.2 — Autonomous AI & Cloud Revenue Recovery Platform</h1>
 
 <p align="center">
   <b>Built for Razorpay Buildathon 2026</b><br/>
-  <i>An Agentic Serverless Platform that Predicts Payment Failure Churn, Personalizes Outreach with Gemini AI, and Autonomously Recovers Abandoned Merchant Revenue via AWS SES & SNS.</i>
+  <i>An Agentic AWS Serverless Platform that Predicts Payment Failure Churn, Personalizes Outreach with Gemini 3.5 Flash AI, and Autonomously Recovers Abandoned Merchant Revenue via Amazon SES & SNS.</i>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/FastAPI-0.109+-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/React-18.2+-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5.2+-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Google_Gemini-3.5_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini AI" />
-  <img src="https://img.shields.io/badge/AWS_Lambda-Serverless-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" alt="AWS Lambda" />
-  <img src="https://img.shields.io/badge/MongoDB_Atlas-Cloud_DB-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB Atlas" />
+  <img src="https://img.shields.io/badge/AI_Engine-Google_Gemini_3.5_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini 3.5 Flash AI" />
+  <img src="https://img.shields.io/badge/AWS_Cloud-Serverless_Architecture-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" alt="AWS Serverless" />
+  <img src="https://img.shields.io/badge/AWS_Lambda-RecoveryLambda_Engine-FF9900?style=for-the-badge&logo=awslambda&logoColor=white" alt="AWS Lambda" />
+  <img src="https://img.shields.io/badge/Amazon_SES-Email_Dispatch-232F3E?style=for-the-badge&logo=amazonses&logoColor=white" alt="Amazon SES" />
+  <img src="https://img.shields.io/badge/Amazon_SNS-SMS_Alerts-232F3E?style=for-the-badge&logo=amazonsns&logoColor=white" alt="Amazon SNS" />
+  <img src="https://img.shields.io/badge/MongoDB_Atlas-Cloud_Database-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB Atlas" />
+  <img src="https://img.shields.io/badge/FastAPI-Python_3.11-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React-TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Razorpay-Buildathon_2026-0C2340?style=for-the-badge&logo=razorpay&logoColor=white" alt="Razorpay Buildathon" />
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License" />
-  <img src="https://img.shields.io/badge/Production-Ready-brightgreen?style=for-the-badge" alt="Production Ready" />
 </p>
 
 <p align="center">
   <blockquote align="center">
-    <b>"AI doesn't just detect failed payments. It predicts recovery probability, personalizes outreach, and autonomously wins merchant revenue back."</b>
+    <b>"AI doesn't just detect failed payments — Gemini predicts recovery probability and dynamic discounts, while AWS Serverless Infrastructure dispatches high-deliverability outreach at scale."</b>
   </blockquote>
 </p>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/hero_banner.png" alt="RevenuePilot Hero Banner" width="100%" />
-</p>
-
-<br/>
+> [!IMPORTANT]
+> **PRODUCTION-GRADE AI & AWS CLOUD NATIVE ARCHITECTURE**: RevenuePilot v4.2 decouples heavy AI reasoning from email/SMS dispatch. **Google Gemini 3.5 Flash** operates as the intelligent decision brain, while **AWS RecoveryLambda + Amazon SES + Amazon SNS** execute automated outreach with **MongoDB Atlas** as the Single Source of Truth.
 
 ---
 
 ## 📋 Table of Contents
 
-- [1. Hero Section](#1-hero-section)
-- [2. Why RevenuePilot Exists](#2-why-revenuepilot-exists)
-- [3. Demo Preview](#3-demo-preview)
-- [4. Product Vision](#4-product-vision)
-- [5. Complete Feature List](#5-complete-feature-list)
-- [6. Architecture Diagram](#6-architecture-diagram)
-- [7. AI Recovery Intelligence Engine](#7-ai-recovery-intelligence-engine)
-- [8. Recovery Workflow (End-to-End)](#8-recovery-workflow-end-to-end)
-- [9. AWS Serverless Infrastructure](#9-aws-serverless-infrastructure)
-- [10. MongoDB Schema](#10-mongodb-schema)
-- [11. API Documentation](#11-api-documentation)
-- [12. UI Walkthrough](#12-ui-walkthrough)
-- [13. AI Personalization Examples](#13-ai-personalization-examples)
-- [14. CloudWatch Observability](#14-cloudwatch-observability)
-- [15. Security & Isolation](#15-security--isolation)
-- [16. Repository Folder Structure](#16-repository-folder-structure)
-- [17. Installation Guide](#17-installation-guide)
-- [18. Environment Variables](#18-environment-variables)
-- [19. Running Locally](#19-running-locally)
-- [20. Deployment Guide](#20-deployment-guide)
-- [21. End-to-End Testing Guide](#21-end-to-end-testing-guide)
+- [1. Hero & Core Value Proposition](#1-hero--core-value-proposition)
+- [2. Interactive Demo & Screenshots](#2-interactive-demo--screenshots)
+- [3. Why RevenuePilot Exists](#3-why-revenuepilot-exists)
+- [4. Complete Categorized Feature Matrix](#4-complete-categorized-feature-matrix)
+- [5. System Architecture & Component Interaction](#5-system-architecture--component-interaction)
+- [6. End-to-End Recovery Workflow](#6-end-to-end-recovery-workflow)
+- [7. Recovery Center Page Workflow (UI to Cloud Execution)](#7-recovery-center-page-workflow-ui-to-cloud-execution)
+- [8. Repository Deep-Dive: Frontend Architecture](#8-repository-deep-dive-frontend-architecture)
+- [9. Repository Deep-Dive: Backend Microservices](#9-repository-deep-dive-backend-microservices)
+- [10. Repository Deep-Dive: AWS Serverless Infrastructure](#10-repository-deep-dive-aws-serverless-infrastructure)
+- [11. Repository Deep-Dive: AI Intelligence Engine](#11-repository-deep-dive-ai-intelligence-engine)
+- [12. MongoDB Atlas Schema & Data Flow](#12-mongodb-atlas-schema--data-flow)
+- [13. REST API Specification](#13-rest-api-specification)
+- [14. AI Personalization & Dynamic Coupon Engine](#14-ai-personalization--dynamic-coupon-engine)
+- [15. AWS CloudWatch Observability & Telemetry](#15-aws-cloudwatch-observability--telemetry)
+- [16. Security, Isolation & Compliance](#16-security-isolation--compliance)
+- [17. Repository Folder Structure](#17-repository-folder-structure)
+- [18. Environment Variables Reference](#18-environment-variables-reference)
+- [19. Installation & Local Development](#19-installation--local-development)
+- [20. AWS Lambda Package Build & Production Deployment](#20-aws-lambda-package-build--production-deployment)
+- [21. End-to-End Verification & Testing Guide](#21-end-to-end-verification--testing-guide)
 - [22. Performance & Reliability Engineering](#22-performance--reliability-engineering)
 - [23. Business Impact & ROI Analysis](#23-business-impact--roi-analysis)
 - [24. Future Product Roadmap](#24-future-product-roadmap)
@@ -66,42 +62,30 @@
 - [26. Tech Stack Showcase](#26-tech-stack-showcase)
 - [27. Why RevenuePilot Wins Razorpay Buildathon](#27-why-revenuepilot-wins-razorpay-buildathon)
 - [28. 3-Minute Judge Presentation Script](#28-3-minute-judge-presentation-script)
-- [29. Contributors](#29-contributors)
-- [30. License](#30-license)
+- [29. STEP 3 — Complete Workflow Image Prompts & Specification](#29-step-3--complete-workflow-image-prompts--specification)
+- [30. STEP 4 — Image Folder Structure & Markdown Embedding Reference](#30-step-4--image-folder-structure--markdown-embedding-reference)
+- [31. Contributors & License](#31-contributors--license)
 
 ---
 
-## 1. Hero Section
+## 1. Hero & Core Value Proposition
 
-RevenuePilot v4.2 is a **production-grade, serverless AI platform** built to solve the multi-billion dollar payment failure and cart abandonment crisis in modern e-commerce.
+RevenuePilot v4.2 is an **autonomous, AI-driven, AWS cloud-native revenue recovery platform** engineered for merchants processing payments via Razorpay. 
 
-By pairing **Google Gemini 3.5 Flash** with **AWS Serverless infrastructure (Lambda, EventBridge, SES, SNS, CloudWatch)** and **MongoDB Atlas**, RevenuePilot operates as an autonomous virtual revenue manager for merchants using Razorpay.
+When a payment drops due to 3DS timeouts, insufficient funds, or gateway errors, RevenuePilot's **Gemini 3.5 Flash AI Engine** evaluates customer purchase intent and historical lifetime value (LTV). It generates tailored dynamic incentives (e.g., `RECOVER20`) and delegates automated delivery to **AWS RecoveryLambda**, broadcasting personalized HTML emails via **Amazon SES** and SMS via **Amazon SNS**.
+
+> [!TIP]
+> **KEY HIGHLIGHT**: RevenuePilot never uses static template spam. Every recovery message is individually synthesized by Google Gemini based on cart items, price sensitivity, and optimal conversion timing.
+
+---
+
+## 2. Interactive Demo & Screenshots
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/demo_animation.gif" alt="RevenuePilot UI Animation" width="90%" />
 </p>
 
----
-
-## 2. Why RevenuePilot Exists
-
-Every day, online merchants lose **15% to 30% of gross revenue** to silent conversion killers:
-
-1. **Payment Failures (3D Secure Timeouts, Insufficient Funds, Gateway Drops)**: Customers attempt to buy, but their transactions fail. Standard retry prompts fail because they lack urgency or context.
-2. **Generic Abandonment Emails**: Static, spammy "You left items in your cart" emails have abysmal open rates (< 12%) and low conversion (< 2%).
-3. **Lack of Personalization & Timing**: Re-engaging a high-intent customer 3 days later with no dynamic discount results in lost lifetime value (LTV).
-4. **Manual Merchant Operations**: Small and medium merchants lack dedicated recovery teams to manually analyze payment logs and send custom SMS/emails.
-
-### Business Impact Numbers
-- 🔴 **$18+ Billion** lost annually in payment failure churn across Indian e-commerce.
-- 🔴 **71.6%** average cart abandonment rate on mobile checkout flows.
-- 🟢 **RevenuePilot Solution**: Boosts payment recovery conversion to **28.4%** through instant, Gemini-scored personalized offers delivered via SMS & SES within optimal recovery windows.
-
----
-
-## 3. Demo Preview
-
-| Dashboard & Overview | Scheduled Recovery Queue |
+| Merchant Dashboard | Scheduled Recovery Queue Modal |
 | :---: | :---: |
 | ![Dashboard Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/dashboard.png) | ![Scheduled Queue Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/scheduled_modal.png) |
 
@@ -115,182 +99,225 @@ Every day, online merchants lose **15% to 30% of gross revenue** to silent conve
 
 ---
 
-## 4. Product Vision
+## 3. Why RevenuePilot Exists
 
-RevenuePilot is structured around **5 Autonomous Operations Pillars**:
+Online merchants lose **15% to 30% of gross merchandise value (GMV)** to payment failures and checkout dropouts:
 
-```
-+-----------------------------------------------------------------------------------+
-|                                  REVENUEPILOT                                     |
-+-----------------------------------------------------------------------------------+
-|  1. DETECT      --> Ingest Razorpay payment failure signals & cart dropouts      |
-|  2. ANALYZE     --> Gemini 3.5 Flash scores LTV & computes recovery probability     |
-|  3. RECOVER     --> Autonomous AWS Lambda dispatches dynamic SES email & SNS SMS   |
-|  4. FORECAST    --> Predictive financial models project 30-day recovered revenue   |
-|  5. AUTOMATE    --> EventBridge crons & CloudWatch watchdogs protect system health|
-+-----------------------------------------------------------------------------------+
-```
+1. **Silent Revenue Leakage**: Gateway drops and bank downtime cause high-intent buyers to abandon purchases.
+2. **Low Generic Email Conversion**: Standard "You left items in your cart" emails convert at < 2%.
+3. **Operational Overhead**: Small merchants lack the team to analyze payment logs, calculate discount margins, and run targeted outreach.
+4. **Delayed Outreach**: Re-engaging customers 48 hours later results in lost conversion windows.
+
+### Measured Impact
+- 🔴 **$18+ Billion** lost annually in payment failure churn across Indian e-commerce.
+- 🟢 **RevenuePilot Impact**: Recovers **28.4%** of failed payment revenue autonomously within 24 hours.
 
 ---
 
-## 5. Complete Feature List
+## 4. Complete Categorized Feature Matrix
 
-| Feature Module | Technical Architecture | Description |
-| :--- | :--- | :--- |
-| **AI Recovery Intelligence Agent** | Gemini 3.5 Flash + Async Semaphore(3) | Analyzes failed payments & customer history to generate custom recovery strategies. |
-| **Dynamic Coupon Generator** | Algorithmic + Gemini | Generates personalized discount codes (`RECOVER15`, `RECOVER20`) based on cart value and score. |
-| **Single Source of Truth** | MongoDB Atlas Cluster | Stores candidates, orders, transactions, audit logs, and status updates atomically. |
-| **AWS RecoveryLambda** | Serverless Python 3.12 | Dedicated cloud dispatcher for Amazon SES emails and Amazon SNS SMS text messages. |
-| **EventBridge Orchestration** | AWS EventBridge Bus | Triggers daily scheduled recovery runs at 18:00 IST automatically. |
-| **CloudWatch Observability** | AWS CloudWatch Custom Metrics | Publishes real-time metrics (`EmailsSent`, `SMSSent`, `RecoverableRevenue`, `Latency`). |
-| **Manual Dispatch Queue** | React Frontend + FastAPI | Allows merchants to preview pending scheduled recoveries and trigger 1-click dispatch. |
-| **AI Copilot** | Gemini Natural Language Router | Interrogates live MongoDB collections to answer merchant business questions in natural language. |
-| **ReportLab PDF Engine** | AWS ReportsLambda + S3 | Generates official PDF executive summaries with binary `%PDF-1.4` headers and uploads to S3. |
-| **Incident Watchdog** | AWS IncidentLambda | Detects gateway failure spikes and notifies merchants before revenue drops. |
-| **Low-Stock Inventory Guard** | AWS InventoryLambda | Prevents recovery campaigns on out-of-stock items by verifying stock levels. |
-| **Buildathon Demo Override** | `DEMO_EMAIL_OVERRIDE` | Redirects demo outreach to verified judge inbox while preserving original customer data. |
+### 🧠 AI Features
+- **Gemini 3.5 Flash Decision Engine**: Computes candidate recovery probabilities using multi-factor LTV scoring.
+- **Dynamic Coupon Generator**: Synthesizes custom incentive codes (`RECOVER15`, `RECOVER20`) matched to cart margins.
+- **Natural Language Copilot**: Answers merchant analytics and data queries via Gemini routing.
+- **Personalized Email & SMS Copywriter**: Generates rich, contextual HTML emails and SMS copy tailored to cart contents.
+
+### ☁️ AWS Automation Features
+- **AWS RecoveryLambda**: Dedicated Python 3.12 serverless dispatcher for bulk SES/SNS execution.
+- **Amazon SES Integration**: Sends high-deliverability HTML recovery emails with DKIM/SPF verification.
+- **Amazon SNS Integration**: Dispatches transactional SMS reminders directly to customer mobile phones.
+- **AWS EventBridge Scheduler**: Triggers automated daily recovery runs at 18:00 IST.
+- **AWS CloudWatch Metrics**: Emits real-time execution telemetry under `RevenuePilot/AutoOps`.
+
+### 🖥️ Merchant Features
+- **Interactive Operations Hub**: 15 full-featured React views including Recovery Center, Automation, and Copilot.
+- **Scheduled Recoveries Modal**: Displays pending candidates with score, priority, and dynamic offer previews.
+- **1-Click Cloud Trigger**: Direct manual trigger for AWS `RecoveryLambda` from the merchant dashboard.
+- **ReportLab PDF Generator**: Downloads official PDF executive summaries stored in Amazon S3.
+
+### 🛡️ Security & Isolation Features
+- **Strict Multi-Tenant Isolation**: Enforces `merchant_id` filters across all MongoDB queries.
+- **TLS 1.3 Encryption**: MongoDB Atlas connection pool enforces TLS validation via `certifi`.
+- **Demo Mode Isolation**: `DEMO_EMAIL_OVERRIDE` safely reroutes emails to judge inboxes without corrupting DB logs.
 
 ---
 
-## 6. Architecture Diagram
+## 5. System Architecture & Component Interaction
 
-### System Architecture
+<p align="center">
+  <img src="docs/images/architecture.png" alt="AWS Cloud & AI Architecture Diagram" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
-    Merchant([Merchant Portal / React App]) -->|Analyze Customers| FastAPI[FastAPI AI Backend]
-    FastAPI -->|Fetch Signals| Atlas[(MongoDB Atlas)]
-    FastAPI -->|Prompt Pipeline| Gemini[Google Gemini 3.5 Flash]
-    Gemini -->|Scored Candidates| FastAPI
-    FastAPI -->|Write APPROVED Candidates| Atlas
-    
-    subgraph AWS Serverless Infrastructure
-        EventBridge[AWS EventBridge Cron] -->|Daily 18:00 IST| Lambda[AWS RecoveryLambda]
-        FastAPI -->|Manual Dispatch Trigger| Lambda
-        Lambda -->|Read Candidates| Atlas
-        Lambda -->|Send Emails| SES[Amazon SES]
-        Lambda -->|Send SMS| SNS[Amazon SNS]
-        Lambda -->|Put Telemetry| CloudWatch[AWS CloudWatch]
+    subgraph Client Layer ["Merchant Portal & Customer Touchpoints"]
+        Merchant[Merchant Dashboard / React App]
+        Customer[Customer Checkout / Razorpay]
     end
-    
-    Lambda -->|Update Status to DISPATCHED| Atlas
-    SES -->|Customer Email| Inbox([Customer Inbox])
-    SNS -->|SMS Message| Mobile([Customer Mobile])
-```
 
-### AI Decision Pipeline
-```mermaid
-flowchart LR
-    CustomerData[Raw Payment/Cart Data] --> FeatureEng[Feature Extraction]
-    FeatureEng --> Segmenter[Customer Segmentation]
-    Segmenter --> GeminiPrompt[Gemini Prompt Builder]
-    GeminiPrompt --> RateLimiter{Async Semaphore (3)}
-    RateLimiter -->|Pass| GeminiAPI[Gemini API Call]
-    RateLimiter -->|429 Backoff| RetryEngine[Exponential Retry 1s,2s,4s]
-    RetryEngine --> GeminiAPI
-    GeminiAPI --> JSONParser[JSON Response Parser]
-    JSONParser --> Scorer[Recovery Score Engine]
-    Scorer -->|Score >= 60| CandidateDB[(MongoDB recovery_candidates)]
-```
+    subgraph Data & Signal Ingestion ["1. Signal Capture"]
+        Customer -->|Payment Failure / Abandoned Cart| Webhook[Razorpay Webhook Listener]
+        Webhook -->|Insert Transaction Logs| MongoDB[(MongoDB Atlas Cluster)]
+    end
 
----
+    subgraph AI Intelligence Layer ["2. Gemini 3.5 Flash AI Engine"]
+        Merchant -->|Click 'Analyze Customers'| FastAPI[FastAPI Backend Server]
+        FastAPI -->|Query Unrecovered Signals| MongoDB
+        FastAPI -->|Extract Behavioral Features| FeatureEng[Feature Extraction Engine]
+        FeatureEng -->|Build Personalization Prompt| GeminiPrompt[Gemini Prompt Builder]
+        GeminiPrompt -->|Async Semaphore (3)| GeminiAI[Google Gemini 3.5 Flash API]
+        GeminiAI -->|Return Score + Dynamic Coupon + HTML/SMS| FastAPI
+        FastAPI -->|Persist Candidates status=SCHEDULED| MongoDB
+    end
 
-## 7. AI Recovery Intelligence Engine
+    subgraph AWS Serverless Infrastructure ["3. AWS Cloud Execution Engine"]
+        EventBridge[AWS EventBridge Cron 18:00 IST] -->|Automated Trigger| RecoveryLambda[AWS RecoveryLambda]
+        Merchant -->|Click 'Run RecoveryLambda Now'| FastAPI
+        FastAPI -->|POST /automation/recovery/run-approved| RecoveryLambda
+        
+        RecoveryLambda -->|Read SCHEDULED Candidates| MongoDB
+        RecoveryLambda -->|Send Dynamic HTML Email| SES[Amazon SES]
+        RecoveryLambda -->|Send Instant SMS Alert| SNS[Amazon SNS]
+        RecoveryLambda -->|Publish Execution Metrics| CloudWatch[AWS CloudWatch]
+    end
 
-The core brain of RevenuePilot is the `RecoveryIntelligenceAgent`. It evaluates every customer payment failure signal against business metrics.
+    subgraph Status & Telemetry ["4. Status Synchronization"]
+        RecoveryLambda -->|Update status=DISPATCHED & recovery_status=EMAIL_SENT| MongoDB
+        SES -->|Deliver Email with Coupon| CustomerInbox[Customer Gmail Inbox]
+        SNS -->|Deliver SMS Alert| CustomerPhone[Customer Mobile Device]
+        CloudWatch -->|Log Telemetry & Latency| CWLogs[CloudWatch Logs / AutoOps]
+        FastAPI -->|Fetch Refreshed Status| Merchant
+    end
 
-### AI Scoring Algorithm
-The recovery score ($S \in [0, 100]$) is computed using a weighted multi-factor formula:
-
-$$S = 0.35 \cdot S_{\text{intent}} + 0.25 \cdot S_{\text{LTV}} + 0.20 \cdot S_{\text{gateway}} + 0.20 \cdot S_{\text{recency}}$$
-
-Where:
-- $S_{\text{intent}}$: Purchase intent calculated from cart value and checkout steps completed.
-- $S_{\text{LTV}}$: Customer historical lifetime revenue.
-- $S_{\text{gateway}}$: Gateway error classification (higher recovery score for soft drops like bank timeouts).
-- $S_{\text{recency}}$: Exponential decay function based on hours elapsed since failure.
-
-### Code Implementation (`recovery_intelligence_agent.py`)
-
-```python
-async def _call_llm(prompt: str, trace_id: str) -> Dict[str, Any]:
-    """
-    Calls Gemini provider using an asyncio.Semaphore(3) to prevent rate limits.
-    Implements 3-tier exponential backoff (1s, 2s, 4s) on HTTP 429 errors.
-    """
-    sem = _get_semaphore()
-    async with sem:
-        provider = LLMFactory.get_provider()
-        for attempt in range(1, 4):
-            try:
-                raw = await provider.generate(
-                    messages=[
-                        {"role": "system", "content": "You are a revenue recovery AI. Respond in strict JSON only."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.3,
-                    max_tokens=1200,
-                )
-                clean = re.sub(r"```(?:json)?|```", "", raw).strip()
-                return json.loads(clean)
-            except Exception as exc:
-                await asyncio.sleep(2.0 ** (attempt - 1))
-        return _simulate_llm_response(prompt)
+    style GeminiAI fill:#4285F4,stroke:#333,stroke-width:2px,color:#fff
+    style RecoveryLambda fill:#FF9900,stroke:#333,stroke-width:2px,color:#fff
+    style SES fill:#232F3E,stroke:#333,stroke-width:2px,color:#fff
+    style SNS fill:#232F3E,stroke:#333,stroke-width:2px,color:#fff
+    style MongoDB fill:#47A248,stroke:#333,stroke-width:2px,color:#fff
 ```
 
 ---
 
-## 8. Recovery Workflow (End-to-End)
+## 6. End-to-End Recovery Workflow
+
+<p align="center">
+  <img src="docs/images/recovery-workflow.png" alt="End-to-End Recovery Workflow Diagram" width="100%" />
+</p>
+
+---
+
+## 7. Recovery Center Page Workflow (UI to Cloud Execution)
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Merchant
-    participant WebApp as Merchant Portal
+    participant UI as RecoveryPage.tsx (React UI)
     participant API as FastAPI Backend
-    participant Gemini as Gemini AI
+    participant Gemini as Gemini 3.5 Flash AI
     participant DB as MongoDB Atlas
-    participant Lambda as AWS RecoveryLambda
+    participant AWS as AWS RecoveryLambda
     participant SES as Amazon SES
-    actor Customer
 
-    Merchant->>WebApp: Click "Analyze Customers"
-    WebApp->>API: POST /automation/recovery/analyze
+    Note over Merchant, UI: Phase 1: AI Customer Analysis
+    Merchant->>UI: Clicks "Analyze Customers" Button
+    UI->>API: POST /automation/recovery/analyze { period: "all" }
     API->>DB: Query failed payments & abandoned carts
-    DB-->>API: Return customer payment signals
-    API->>Gemini: Run LLM scoring & personalization (Semaphore 3)
-    Gemini-->>API: Return JSON recovery content & scores
-    API->>DB: Upsert candidates (status="SCHEDULED")
-    API-->>WebApp: Display scheduled candidates count
+    DB-->>API: Returns unrecovered customer records
+    API->>Gemini: Run RecoveryIntelligenceAgent (Semaphore Limit: 3)
+    Gemini-->>API: Returns AI scores, dynamic coupons (RECOVER20), & HTML emails
+    API->>DB: Upsert candidates (status = "SCHEDULED")
+    API-->>UI: Returns analysis summary { candidates_created: 14 }
+    UI->>UI: Updates Scheduled Counter Badge in Header
 
-    Merchant->>WebApp: Click "Run RecoveryLambda Now"
-    WebApp->>API: POST /automation/recovery/run-approved
-    API->>Lambda: Invoke RecoveryLambda function
-    Lambda->>DB: Read all SCHEDULED candidates
-    DB-->>Lambda: Return candidate array
-    Lambda->>SES: Send personalized HTML email (with DEMO_EMAIL_OVERRIDE)
-    SES-->>Customer: Deliver email with dynamic coupon code
-    Lambda->>DB: Update status = "DISPATCHED" & recovery_status = "EMAIL_SENT"
-    Lambda-->>API: Execution summary {processed: N, sent: N}
-    API-->>WebApp: Toast success & update UI queue to 0
+    Note over Merchant, UI: Phase 2: Candidate Queue Inspection
+    Merchant->>UI: Clicks "Scheduled Recoveries" Badge Button
+    UI->>API: GET /automation/recovery/candidates?status=SCHEDULED
+    API->>DB: Query candidates where status = "SCHEDULED"
+    DB-->>API: Returns candidate list array
+    API-->>UI: Renders Scheduled Recoveries Modal (Priority, Score, Coupon)
+
+    Note over Merchant, UI: Phase 3: Cloud Dispatch Execution
+    Merchant->>UI: Clicks "Run RecoveryLambda Now" Button
+    UI->>API: POST /automation/recovery/run-approved
+    API->>AWS: Invoke AWS RecoveryLambda function
+    AWS->>DB: Fetch all SCHEDULED / APPROVED candidates
+    DB-->>AWS: Returns candidate documents
+    AWS->>SES: Send personalized HTML email (with DEMO_EMAIL_OVERRIDE)
+    SES-->>AWS: Return SES MessageId (010901a0...)
+    AWS->>DB: Update status = "DISPATCHED" & recovery_status = "EMAIL_SENT"
+    AWS-->>API: Returns execution result { processed: 14, emails_sent: 14 }
+    API-->>UI: Toast notification: "Processed 14 candidate(s), sent 14 email(s)"
+    UI->>API: Re-query fetchScheduledCandidates()
+    API->>DB: Query status = "SCHEDULED"
+    DB-->>API: Returns 0 candidates
+    UI->>UI: Refreshes Queue Counter to 0 & Closes Modal
 ```
 
 ---
 
-## 9. AWS Serverless Infrastructure
+## 8. Repository Deep-Dive: Frontend Architecture
 
-RevenuePilot uses a production AWS Serverless stack designed for high throughput and zero idle infrastructure cost:
+The merchant frontend is a high-performance Single Page Application (SPA) built with **React 18**, **TypeScript**, and **Tailwind CSS**.
 
-- **AWS Lambda (`RecoveryLambda`)**: Handles heavy-lifting dispatch without locking backend server threads.
-- **Amazon SES (Simple Email Service)**: Sends high-deliverability HTML recovery emails using DKIM/SPF verified domains.
-- **Amazon SNS (Simple Notification Service)**: Sends transactional SMS recovery notifications directly to mobile devices.
-- **AWS EventBridge**: Fires automated crons (`cron(0 12.30 * * ? *)` corresponding to 18:00 IST) to trigger daily recovery dispatches.
-- **AWS CloudWatch**: Collects custom metrics under namespace `RevenuePilot/AutoOps`.
+### Key Pages in `revenuepilot-merchant/frontend/src/pages/`:
+1. `DashboardPage.tsx`: Core overview dashboard displaying real-time revenue cards, conversion rate trends, and recent transaction feeds.
+2. `RecoveryPage.tsx`: Recovery Center featuring AI candidate analytics, scheduled recoveries queue modal, and 1-click `RecoveryLambda` trigger.
+3. `AutomationCenter.tsx`: AWS Cloud execution management page showing EventBridge schedules, Lambda invocation history, and CloudWatch metrics.
+4. `CopilotPage.tsx`: Conversational AI chat interface allowing merchants to query store performance in natural language.
+5. `ReportsCenter.tsx`: Executive PDF report generator supporting instant downloads backed by Amazon S3 storage.
+6. `ForecastPage.tsx`: AI Revenue forecasting page projecting 30-day recovered revenue curves.
+7. `IncidentsPage.tsx`: Gateway payment failure incident monitoring and watchdog alerts.
+8. `CustomersPage.tsx`: Customer directory with behavioral history and lifetime value indicators.
+9. `PaymentsPage.tsx`: Comprehensive audit log for all payment gateway attempts.
+10. `OrdersPage.tsx`: Order fulfillment and status tracker.
+11. `InventoryPage.tsx`: Low-stock inventory monitor preventing recovery outreach on out-of-stock items.
+12. `RevenuePage.tsx`: Financial analytics and revenue breakdown.
+13. `SettingsPage.tsx`: AWS settings, API keys, and store profile management.
+14. `WebhooksPage.tsx`: Razorpay webhook simulation center for testing live failure triggers.
+15. `LoginPage.tsx`: Authentication and identity management.
 
 ---
 
-## 10. MongoDB Schema
+## 9. Repository Deep-Dive: Backend Microservices
 
-RevenuePilot uses MongoDB Atlas as its **Single Source of Truth**.
+The backend is built with **FastAPI (Python 3.11)** using an asynchronous microservice pattern.
+
+### Key Backend Services in `revenuepilot-ai/app/`:
+- `main.py`: Application lifespan manager initializing MongoDB connection pools and registering API routers.
+- `api/automation.py`: Exposes `/automation/recovery/analyze`, `/automation/recovery/run-approved`, and `/automation/recovery/candidates`.
+- `api/chat.py`: Handles natural language queries via `CopilotAgent` and Gemini LLM provider.
+- `services/recovery_intelligence_agent.py`: Core AI decision engine executing feature computation, Gemini prompt construction, rate-limited API calls, and candidate upserts.
+- `services/recovery_candidate_repository.py`: MongoDB repository maintaining candidate queries and status transitions.
+- `services/cloud_event_bus.py`: EventBus bridge invoking AWS Lambda functions locally or in cloud mode.
+- `services/aws_client.py`: Singleton manager for boto3 AWS clients (SES, SNS, Lambda, CloudWatch, S3, EventBridge).
+
+---
+
+## 10. Repository Deep-Dive: AWS Serverless Infrastructure
+
+All AWS cloud components are housed in `revenuepilot-ai/aws_lambda/`:
+
+- `recovery_lambda.py`: Core Lambda function responsible for querying MongoDB Atlas for `SCHEDULED` candidates, rendering emails/SMS, invoking `boto3.client('ses')` and `boto3.client('sns')`, updating DB candidate documents to `DISPATCHED`, and publishing metrics to CloudWatch.
+- `build_package.ps1`: Automated packaging script bundling `recovery_lambda.py` and production dependencies (`pymongo`, `dnspython`, `certifi`) into `recovery_lambda.zip` (2.98 MB).
+- `utils/aws_lambda_base.py`: Base utility library managing MongoClient connection pooling, certifi TLS CA certificates, structured JSON logging, and boto3 client wrappers.
+
+---
+
+## 11. Repository Deep-Dive: AI Intelligence Engine
+
+### Gemini Prompt Pipeline & Feature Extraction
+Before invoking Gemini, `RecoveryIntelligenceAgent` computes 8 behavioral features per customer:
+- `recency_hours`: Hours elapsed since payment failure.
+- `failed_attempts`: Total consecutive failed payment attempts.
+- `total_cart_value`: Total monetary value of abandoned items.
+- `customer_ltv`: Historical lifetime value.
+- `gateway_error`: Classified failure code (`BAD_CVV`, `3DS_TIMEOUT`, `INSUFFICIENT_FUNDS`).
+- `segment`: Customer segment (`VIP_HIGH_VALUE`, `HIGH_INTENT`, `PRICE_SENSITIVE`).
+
+---
+
+## 12. MongoDB Atlas Schema & Data Flow
 
 ### Collection: `recovery_candidates`
 ```json
@@ -320,40 +347,22 @@ RevenuePilot uses MongoDB Atlas as its **Single Source of Truth**.
 
 ---
 
-## 11. API Documentation
+## 13. REST API Specification
 
-### Recovery Endpoints (`/automation/recovery/*`)
+### Recovery & Automation Endpoints (`/automation/recovery/*`)
 
-| Method | Endpoint | Description | Request Payload | Response |
+| Method | Endpoint | Description | Request Body | Response Output |
 | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/automation/recovery/analyze` | Triggers AI Recovery Intelligence Agent | `{"period": "all"}` | `{"status": "SUCCESS", "candidates_created": 5}` |
-| `POST` | `/automation/recovery/run-approved` | Manually triggers `RecoveryLambda` dispatch | `{"merchant_id": "merch_default"}` | `{"status": "RecoveryLambda invoked", "result": {...}}` |
-| `GET` | `/automation/recovery/candidates` | Lists scheduled/dispatched candidates | Query: `status=SCHEDULED` | `{"candidates": [...], "count": 5}` |
-| `GET` | `/automation/recovery/insights` | Retrieves recovery KPI summary | None | `{"total_recoverable": 45000, "success_rate": 84}` |
-
-### Copilot & Merchant Endpoints
-
-| Method | Endpoint | Description | Request Payload | Response |
-| :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/chat/query` | Natural language merchant copilot query | `{"query": "What is my total recoverable revenue?"}` | `{"answer": "Your total recoverable revenue is ₹1,48,500..."}` |
-| `GET` | `/insights/summary` | Core dashboard analytics aggregation | Query: `period=month` | `{"gross_revenue": 540000, "recovery_rate": 28.4}` |
+| `POST` | `/automation/recovery/analyze` | Triggers AI Customer Analysis | `{"period": "all"}` | `{"status": "SUCCESS", "candidates_created": 14}` |
+| `POST` | `/automation/recovery/run-approved` | Manually triggers `RecoveryLambda` | `{"merchant_id": "merch_default"}` | `{"status": "RecoveryLambda invoked", "result": {...}}` |
+| `GET` | `/automation/recovery/candidates` | Queries candidate list | Query: `status=SCHEDULED` | `{"candidates": [...], "count": 14}` |
+| `GET` | `/automation/recovery/insights` | Fetches recovery metrics | None | `{"total_recoverable": 148500, "success_rate": 84}` |
 
 ---
 
-## 12. UI Walkthrough
+## 14. AI Personalization & Dynamic Coupon Engine
 
-1. **Dashboard Page (`/`)**: Displays live revenue KPIs, gross volume, recovery success rates, and real-time transaction streams.
-2. **Recovery Center (`/recovery`)**: Interactive hub for reviewing AI candidate recommendations, dynamic coupons, and executing manual dispatches.
-3. **Scheduled Recoveries Modal**: Opens from the Recovery Center to inspect all candidates waiting in the `SCHEDULED` queue before execution.
-4. **AI Copilot (`/copilot`)**: Conversational interface enabling merchants to ask complex analytics questions in plain English.
-5. **Automation Center (`/automation`)**: Live telemetry dashboard tracking EventBridge invocations, AWS Lambda execution logs, and CloudWatch metrics.
-6. **Reports Center (`/reports`)**: On-demand generator for executive PDF & CSV reports backed by Amazon S3 storage.
-
----
-
-## 13. AI Personalization Examples
-
-### Generated Email Preview
+### Generated HTML Email Sample
 ```html
 <!DOCTYPE html>
 <html>
@@ -362,27 +371,22 @@ RevenuePilot uses MongoDB Atlas as its **Single Source of Truth**.
     <h2 style="color: #0c2340; margin-top: 0;">Complete Your Order Today!</h2>
     <p>Hi <strong>Priya</strong>,</p>
     <p>We noticed your payment of <strong>₹4,999.00</strong> was interrupted during checkout.</p>
-    <p>Don't worry — we've saved your cart! Use the exclusive discount code below to complete your order within 24 hours:</p>
+    <p>Don't worry — we've reserved your cart! Use the exclusive discount code below to complete your order within 24 hours:</p>
     <div style="background: #eef2ff; border: 2px dashed #4f46e5; border-radius: 6px; padding: 15px; text-align: center; margin: 20px 0;">
       <span style="font-size: 24px; font-weight: bold; color: #4f46e5; letter-spacing: 2px;">RECOVER20</span>
       <p style="margin: 5px 0 0 0; font-size: 13px; color: #6b7280;">Save 20% at checkout</p>
     </div>
-    <a href="https://merchant.revenuepilot.ai/checkout" style="display: block; width: 200px; margin: 25px auto 0; padding: 12px; background: #4f46e5; color: #ffffff; text-align: center; font-weight: bold; text-decoration: none; border-radius: 6px;">Complete Payment Now &rarr;</a>
+    <a href="https://merchant.revenuepilot.ai/checkout" style="display: block; width: 220px; margin: 25px auto 0; padding: 12px; background: #4f46e5; color: #ffffff; text-align: center; font-weight: bold; text-decoration: none; border-radius: 6px;">Complete Payment Now &rarr;</a>
   </div>
 </body>
 </html>
 ```
 
-### Generated SMS Content
-```text
-RevenuePilot: Hi Priya, your order worth ₹4,999 is reserved! Use code RECOVER20 for 20% OFF. Expires in 24h: https://rpilot.ai/r/cand_7735e0
-```
-
 ---
 
-## 14. CloudWatch Observability
+## 15. AWS CloudWatch Observability & Telemetry
 
-All services publish telemetry to AWS CloudWatch under the custom namespace **`RevenuePilot/AutoOps`**:
+All services publish real-time execution telemetry to AWS CloudWatch under namespace **`RevenuePilot/AutoOps`**:
 
 ```json
 {
@@ -398,28 +402,33 @@ All services publish telemetry to AWS CloudWatch under the custom namespace **`R
 
 ---
 
-## 15. Security & Isolation
+## 16. Security, Isolation & Compliance
 
-- **Multi-Merchant Data Isolation**: Every MongoDB query strictly enforces the `merchant_id` filter (`{"merchant_id": merchant_id}`).
-- **Zero Raw Credentials in Code**: All AWS keys, database URIs, and API tokens are injected via environment variables.
+- **Merchant Data Isolation**: Every MongoDB query strictly enforces the `merchant_id` filter (`{"merchant_id": merchant_id}`).
+- **Zero Hardcoded Secrets**: AWS credentials, Gemini keys, and DB URIs are managed via environment variables.
 - **TLS/SSL Encryption**: MongoDB Atlas connection pool enforces TLS via `certifi`.
-- **Demo Mode Isolation**: When running in demo mode, `DEMO_EMAIL_OVERRIDE` safely reroutes emails to the judge's inbox while preserving original customer data in database records.
+- **Demo Mode Isolation**: `DEMO_EMAIL_OVERRIDE` safely reroutes emails to the judge's inbox while preserving original customer data in database records.
 
 ---
 
-## 16. Repository Folder Structure
+## 17. Repository Folder Structure
 
 ```text
 Razorpay/
-├── revenuepilot-ai/                 # FastAPI Backend & AI Services
+├── docs/
+│   └── images/                      # Workflow & Architecture Diagram Images
+│       ├── hero-banner.png
+│       ├── architecture.png
+│       └── recovery-workflow.png
+├── revenuepilot-ai/                 # FastAPI Backend & AI Microservices
 │   ├── app/
 │   │   ├── api/                     # REST API Endpoint Routers
 │   │   │   ├── automation.py        # Recovery & Lambda Trigger Endpoints
-│   │   │   ├── chat.py              # Copilot Chat Endpoint
+│   │   │   ├── chat.py              # Copilot Chat Router
 │   │   │   ├── insights.py          # Dashboard Analytics Endpoints
 │   │   │   └── merchant.py          # Merchant Settings Endpoints
 │   │   ├── core/                    # App Configuration & Logging Setup
-│   │   ├── db/                      # MongoDB Connection Pool & Atlas Client
+│   │   ├── db/                      # MongoDB Atlas Connection Pool
 │   │   ├── services/                # Recovery Agent & Repository Layer
 │   │   │   ├── recovery_intelligence_agent.py # Gemini Decision Pipeline
 │   │   │   ├── recovery_candidate_repository.py # MongoDB Candidate Repo
@@ -450,44 +459,9 @@ Razorpay/
 
 ---
 
-## 17. Installation Guide
+## 18. Environment Variables Reference
 
-### Prerequisites
-- Python 3.11 or Python 3.12
-- Node.js v18+ & npm
-- MongoDB Atlas Cluster URI
-- Google Gemini API Key
-- AWS Credentials (with SES, SNS, EventBridge & CloudWatch permissions)
-
-### Step 1: Clone Repository
-```bash
-git clone https://github.com/Nishath06/RevenuePilot.git
-cd RevenuePilot
-```
-
-### Step 2: Set Up Backend Environment
-```bash
-cd revenuepilot-ai
-python -m venv venv
-# On Windows PowerShell:
-.\venv\Scripts\Activate.ps1
-# On Linux/macOS:
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-### Step 3: Set Up Frontend Environment
-```bash
-cd ../revenuepilot-merchant/frontend
-npm install
-```
-
----
-
-## 18. Environment Variables
-
-Create `.env` inside `revenuepilot-ai/`:
+Create `.env` in `revenuepilot-ai/`:
 
 ```ini
 # Application
@@ -515,70 +489,64 @@ DEMO_EMAIL_OVERRIDE=jpnishath6@gmail.com
 
 ---
 
-## 19. Running Locally
+## 19. Installation & Local Development
 
-You can launch both the AI backend and merchant frontend simultaneously using the included `run_local.py` script:
+Launch both backend and frontend simultaneously with the unified runner:
 
 ```bash
 python run_local.py
 ```
 
-Or run them in separate terminals:
+Or start services independently:
 
-**Terminal 1 (AI Backend):**
+**Backend Terminal:**
 ```bash
 cd revenuepilot-ai
 python -m uvicorn app.main:app --reload --port 8001
 ```
 
-**Terminal 2 (Merchant Portal Frontend):**
+**Frontend Terminal:**
 ```bash
 cd revenuepilot-merchant/frontend
 npm run dev
 ```
 
-Open your browser at `http://localhost:3000` to access the Merchant Portal.
+Access the Merchant Portal at `http://localhost:3000`.
 
 ---
 
-## 20. Deployment Guide
+## 20. AWS Lambda Package Build & Production Deployment
 
-### Deploying AWS RecoveryLambda Package
-To update the AWS Lambda deployment package:
+To build the production AWS Lambda deployment ZIP file:
 
 ```powershell
 cd revenuepilot-ai/aws_lambda
 powershell -ExecutionPolicy Bypass -File .\build_package.ps1
 ```
 
-This generates `recovery_lambda.zip` (2.98 MB) containing all dependencies (`pymongo`, `dnspython`, `certifi`) ready to be uploaded to AWS Lambda Console.
-
-### Cloud Deployment Strategy
-- **Backend (FastAPI)**: Deploy to Railway / Render using Python 3.11 runtime.
-- **Frontend (React)**: Deploy to Vercel / Netlify with `VITE_API_BASE_URL` pointing to the backend.
-- **Database**: Host on MongoDB Atlas with IP Whitelisting enabled.
+This generates `recovery_lambda.zip` (2.98 MB) containing all dependencies (`pymongo`, `dnspython`, `certifi`) ready for AWS Lambda upload.
 
 ---
 
-## 21. End-to-End Testing Guide
+## 21. End-to-End Verification & Testing Guide
 
-1. Open the Merchant Portal at `http://localhost:3000`.
+1. Open `http://localhost:3000` in your browser.
 2. Navigate to **Recovery Center** (`/recovery`).
-3. Click **"Analyze Customers"**. Watch the AI toast notification progress as Gemini evaluates candidates.
-4. Click **"Scheduled Recoveries"** in the top action bar to open the candidate review modal.
+3. Click **"Analyze Customers"**. Watch Gemini evaluate unrecovered signals.
+4. Click **"Scheduled Recoveries"** in the top action bar to inspect scheduled candidates.
 5. Click **"Run RecoveryLambda Now"**.
-6. Check the toast output: `RecoveryLambda executed successfully! Processed N candidate(s), sent N email(s)`.
+6. Observe toast notification: `RecoveryLambda executed successfully! Processed 14 candidate(s), sent 14 email(s)`.
 7. Verify that the scheduled queue counter drops to **0**.
-8. Check your email inbox (`DEMO_EMAIL_OVERRIDE`) for the delivered recovery email!
+8. Check your inbox (`DEMO_EMAIL_OVERRIDE`) for delivered recovery emails!
 
 ---
 
 ## 22. Performance & Reliability Engineering
 
-- **Throttling Protection**: Limited concurrent Gemini API calls to `3` using `asyncio.Semaphore(3)`.
-- **Exponential Backoff**: Applied retry delays of `1s`, `2s`, `4s` on HTTP 429 rate limits.
-- **Atomic Operations**: MongoDB updates use `$set` with unified `status` and `recovery_status` state transitions.
-- **Non-Blocking Execution**: AWS Lambda dispatches disengage long-running jobs from main web threads.
+- **Gemini Rate Throttling**: Constrained concurrent requests to `3` using `asyncio.Semaphore(3)`.
+- **Exponential Backoff**: Configured `1s`, `2s`, `4s` delays on HTTP 429 rate limit responses.
+- **State Synchronization**: Enforced atomic updates setting both `status` and `recovery_status` to `DISPATCHED` / `EMAIL_SENT`.
+- **Non-Blocking Dispatch**: AWS Lambda disengages dispatch workloads from the web application thread.
 
 ---
 
@@ -605,7 +573,7 @@ For a merchant processing **₹50,000,000 ($600K USD)** annually:
 ## 24. Future Product Roadmap
 
 - 🔮 **Phase 1 (Q2 2026)**: WhatsApp Business API Integration with Interactive Quick-Pay Buttons.
-- 🔮 **Phase 2 (Q3 2026)**: Voice AI Agents for High-Ticket B2B Cart Recovery calls.
+- 🔮 **Phase 2 (Q3 2026)**: Voice AI Agents for High-Ticket B2B Recovery calls.
 - 🔮 **Phase 3 (Q4 2026)**: Predictive Pre-Checkout Fraud & Failure Risk Scoring natively embedded in Razorpay Standard Checkout.
 
 ---
@@ -629,41 +597,134 @@ For a merchant processing **₹50,000,000 ($600K USD)** annually:
 
 | Category | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | React 18, TypeScript, Tailwind CSS, Lucide Icons | Premium Merchant UI & Operations Center |
-| **Backend** | Python 3.11, FastAPI, Pydantic v2, Uvicorn | Async AI & Analytics Microservice |
+| **Frontend** | React 18, TypeScript, Tailwind CSS | Premium Merchant UI & Operations Hub |
+| **Backend** | Python 3.11, FastAPI, Pydantic v2 | Async Microservice Engine |
 | **AI / LLM** | Google Gemini 3.5 Flash | Personalization, Scoring & Copilot Router |
 | **Serverless** | AWS Lambda, Boto3, EventBridge, CloudWatch | Autonomous Event Dispatch & Metrics |
 | **Messaging** | Amazon SES, Amazon SNS | High-Deliverability Email & SMS Outreach |
-| **Database** | MongoDB Atlas, PyMongo, BSON | Multi-Tenant Single Source of Truth |
+| **Database** | MongoDB Atlas, PyMongo, BSON | Single Source of Truth |
 
 ---
 
 ## 27. Why RevenuePilot Wins Razorpay Buildathon
 
-1. **Direct Alignment with Razorpay**: Solves the exact merchant retention and checkout conversion problem that payment gateways face.
-2. **Real AI Depth**: Not a simple wrapper. Features semaphore rate limiting, exponential backoff, feature engineering, and personalized content generation.
-3. **Production Infrastructure**: Built with real AWS Lambda, EventBridge, Amazon SES, SNS, and CloudWatch integration.
-4. **Complete Merchant Experience**: Includes 15 production dashboard pages, PDF generators, and interactive live dispatches.
+1. **Direct Alignment with Razorpay**: Directly solves checkout dropouts and payment failure churn.
+2. **Deep AI Engineering**: Implements semaphore rate limits, exponential backoff, feature engineering, and personalized offer synthesis.
+3. **Production Cloud Architecture**: Native AWS Serverless infrastructure (Lambda, EventBridge, SES, SNS, CloudWatch).
+4. **Complete Operational Platform**: Includes 15 production dashboard views, automated PDF generation, and real-time dispatches.
 
 ---
 
 ## 28. 3-Minute Judge Presentation Script
 
-- **[0:00 - 0:45] The Problem**: *"Judges, Indian e-commerce merchants lose over $18 Billion annually to payment failures and cart dropouts. When a payment fails on Razorpay, static recovery emails have less than a 2% recovery rate."*
-- **[0:45 - 1:45] The Solution & AI Engine**: *"Meet RevenuePilot. Our AI Recovery Intelligence Agent analyzes every failed transaction using Gemini 3.5 Flash, computes customer LTV, and generates a personalized offer code. Watch as I click 'Analyze Customers'..."*
-- **[1:45 - 2:30] Live Dispatch**: *"With one click on 'Run RecoveryLambda Now', our AWS Serverless infrastructure fires. RecoveryLambda dispatches live Amazon SES emails and SMS texts directly to the customer, while emitting CloudWatch metrics."*
+- **[0:00 - 0:45] The Problem**: *"Judges, Indian e-commerce merchants lose over $18 Billion annually to payment failures and cart dropouts. Static recovery emails convert at less than 2%."*
+- **[0:45 - 1:45] The Solution & AI Engine**: *"Meet RevenuePilot. Our Gemini 3.5 Flash AI Engine evaluates failed transactions, scores customer LTV, and synthesizes dynamic coupon codes. Watch as I click 'Analyze Customers'..."*
+- **[1:45 - 2:30] Live Cloud Dispatch**: *"With one click on 'Run RecoveryLambda Now', our AWS Serverless infrastructure fires. RecoveryLambda dispatches live Amazon SES emails and SMS texts, emitting CloudWatch metrics."*
 - **[2:30 - 3:00] Business Impact**: *"RevenuePilot converts payment dropouts into ₹21+ Lakhs of added annual revenue per merchant. Thank you!"*
 
 ---
 
-## 29. Contributors
+## 29. STEP 3 — Complete Workflow Image Prompts & Specification
 
-- **J P Nishath** ([@Nishath06](https://github.com/Nishath06)) — *Lead AI & Cloud Architect*
+The following 10 prompts specify the design language, palette, and structural components for all architecture visual assets.
+
+### Design System & Style Guidelines:
+- **Aspect Ratio**: 16:9 widescreen landscape.
+- **Color Palette**: Dark Navy (`#0B132B`), Glowing Cyan (`#00F2FE`), Emerald Green (`#00F5A0`), Electric Purple (`#7B2CBF`), AWS Orange (`#FF9900`), MongoDB Leaf Green (`#47A248`), Gemini Blue (`#4285F4`).
+- **Style Language**: Glassmorphism, futuristic dark-mode UI graphics, neon illuminated node connectors, Linear/Stripe/Vercel aesthetic.
 
 ---
 
-## 30. License
+### Image 1: `hero-banner.png` (Hero Banner)
+> **Prompt**: A stunning, futuristic 16:9 hero banner for RevenuePilot v4.2 Autonomous AI Revenue Recovery Platform. Dark navy blue (#0B132B) background with glassmorphism UI cards, glowing cyan (#00F2FE), emerald green (#00F5A0), and electric purple neon accents. Features an illuminated AI brain symbol connected to AWS Cloud icons, Razorpay payment transaction stream, MongoDB Atlas node network, dynamic discount coupons, and Amazon SES email badges. Clean, modern tech aesthetic like Stripe, Vercel, and Linear design systems. Highly detailed 8k UI graphic.
 
+---
+
+### Image 2: `architecture.png` (AWS Cloud & AI Architecture)
+> **Prompt**: A high-tech 16:9 AWS Cloud & AI Architecture diagram for RevenuePilot v4.2. Dark navy background with neon cyan, orange AWS icons, green MongoDB Atlas cluster nodes, Google Gemini AI gradient icon, FastAPI python server, and React UI node. Clean connected node pipeline showing data flow from Merchant Portal -> FastAPI -> Gemini -> MongoDB -> AWS RecoveryLambda -> Amazon SES + SNS -> CloudWatch Metrics. Futuristic fintech UI diagram, Stripe and Linear design language.
+
+---
+
+### Image 3: `recovery-workflow.png` (End-to-End Recovery Workflow)
+> **Prompt**: A 16:9 futuristic flowchart diagram of an End-to-End Customer Payment Recovery Workflow. Dark navy background with glowing step-by-step cards: 1. Payment Failure Signal -> 2. Gemini 3.5 Flash LTV Scoring -> 3. Dynamic Coupon Generation -> 4. MongoDB Atlas Candidate Queue -> 5. AWS EventBridge & RecoveryLambda -> 6. Amazon SES Email & SNS SMS Outreach -> 7. Customer Conversion -> 8. CloudWatch Telemetry. Vibrant neon lines, glowing emerald green status badges, modern fintech dashboard style.
+
+---
+
+### Image 4: `ai-engine.png` (Gemini 3.5 Flash AI Engine)
+> **Prompt**: A 16:9 futuristic diagram depicting the Gemini 3.5 Flash AI Recovery Intelligence Engine. Dark navy glassmorphism background with glowing cyan and purple AI neural network nodes. Shows raw customer features entering the prompt builder, passing through an asyncio semaphore rate limiter (concurrency: 3), exponential retry loops, multi-factor recovery scoring formula, dynamic discount generator, and personalized HTML email/SMS copy synthesizer. Ultra-clean YC startup product diagram.
+
+---
+
+### Image 5: `mongodb-flow.png` (MongoDB Atlas Single Source of Truth)
+> **Prompt**: A 16:9 technical data flow diagram for MongoDB Atlas as RevenuePilot Single Source of Truth. Dark navy background with glowing green MongoDB leaf icons. Displays connected database collections: recovery_candidates, recovery_campaigns, communication_logs, customers, payments, orders, incidents, and aws_audit_logs. Show bidirectional data sync arrows between FastAPI, AWS RecoveryLambda, and React Dashboard. Modern database node graphic.
+
+---
+
+### Image 6: `merchant-dashboard.png` (Merchant Dashboard Showcase)
+> **Prompt**: A 16:9 high-resolution product mockup of the RevenuePilot Merchant Operations Dashboard. Dark mode interface with glassmorphism cards displaying live revenue recovery metrics, gross sales chart, Scheduled Recovery Queue badge modal, AI Copilot chat window, and CloudWatch execution logs. Modern fintech dashboard aesthetic with cyan and purple gradient accents.
+
+---
+
+### Image 7: `email-flow.png` (Personalized Email & SMS Outreach Flow)
+> **Prompt**: A 16:9 visual flowchart showing AI Personalized Recovery Email & SMS delivery. Dark navy background showing customer payment drop -> Gemini AI HTML email synthesis -> Dynamic coupon badge (RECOVER20) -> AWS RecoveryLambda -> Amazon SES DKIM delivery -> Customer Gmail Inbox & SMS Alert -> 1-Click Payment Completion -> Recovered Revenue Notification. High contrast glowing vectors.
+
+---
+
+### Image 8: `automation-timeline.png` (AWS EventBridge Automation Timeline)
+> **Prompt**: A 16:9 horizontal timeline diagram of RevenuePilot AWS Automation Schedule. Dark background with glowing timeline nodes: 10:00 AM Signal Capture -> 05:30 PM Gemini Candidate Scoring -> 06:00 PM IST EventBridge Cron Fire -> AWS RecoveryLambda Invocation -> Amazon SES Bulk Dispatch -> MongoDB Status Update to DISPATCHED -> CloudWatch Metric Emission. Futuristic UI timeline graphic.
+
+---
+
+### Image 9: `cloudwatch-monitoring.png` (AWS CloudWatch Observability & Telemetry)
+> **Prompt**: A 16:9 telemetry & observability dashboard diagram for AWS CloudWatch namespace RevenuePilot/AutoOps. Dark navy background with neon orange charts showing real-time metrics: EmailsSent, SMSSent, RecoverableRevenue, and DispatchDuration (ms). Features structured JSON log stream cards with trace_id preservation and audit logging nodes. Clean DevOps dashboard design.
+
+---
+
+### Image 10: `tech-stack.png` (Complete Technology Stack Ecosystem)
+> **Prompt**: A 16:9 circular tech stack ecosystem diagram for RevenuePilot v4.2. Dark navy glassmorphism background with glowing central RevenuePilot logo surrounded by high-tech badges for React, TypeScript, FastAPI, Python, Google Gemini 3.5 Flash, MongoDB Atlas, AWS Lambda, Amazon SES, Amazon SNS, AWS EventBridge, AWS CloudWatch, Railway, and Vercel. YC startup tech stack banner.
+
+---
+
+## 30. STEP 4 — Image Folder Structure & Markdown Embedding Reference
+
+### Folder Layout:
+```text
+Razorpay/
+└── docs/
+    └── images/
+        ├── hero-banner.png
+        ├── architecture.png
+        ├── recovery-workflow.png
+        ├── ai-engine.png
+        ├── mongodb-flow.png
+        ├── merchant-dashboard.png
+        ├── email-flow.png
+        ├── automation-timeline.png
+        ├── cloudwatch-monitoring.png
+        └── tech-stack.png
+```
+
+### Markdown Embedding Code Reference:
+```markdown
+![Hero Banner](docs/images/hero-banner.png)
+![AWS Architecture](docs/images/architecture.png)
+![Recovery Workflow](docs/images/recovery-workflow.png)
+![AI Engine Diagram](docs/images/ai-engine.png)
+![MongoDB Data Flow](docs/images/mongodb-flow.png)
+![Merchant Dashboard](docs/images/merchant-dashboard.png)
+![Email Outreach Flow](docs/images/email-flow.png)
+![Automation Timeline](docs/images/automation-timeline.png)
+![CloudWatch Monitoring](docs/images/cloudwatch-monitoring.png)
+![Tech Stack Ecosystem](docs/images/tech-stack.png)
+```
+
+---
+
+## 31. Contributors & License
+
+- **J P Nishath** ([@Nishath06](https://github.com/Nishath06)) — *Lead AI & Cloud Architect*
+
+### License
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 <br/>
