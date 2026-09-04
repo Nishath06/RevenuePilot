@@ -41,30 +41,31 @@
 - [5. System Architecture & Component Interaction](#5-system-architecture--component-interaction)
 - [6. End-to-End Recovery Workflow](#6-end-to-end-recovery-workflow)
 - [7. Recovery Center Page Workflow (UI to Cloud Execution)](#7-recovery-center-page-workflow-ui-to-cloud-execution)
-- [8. Repository Deep-Dive: Frontend Architecture](#8-repository-deep-dive-frontend-architecture)
-- [9. Repository Deep-Dive: Backend Microservices](#9-repository-deep-dive-backend-microservices)
-- [10. Repository Deep-Dive: AWS Serverless Infrastructure](#10-repository-deep-dive-aws-serverless-infrastructure)
-- [11. Repository Deep-Dive: AI Intelligence Engine](#11-repository-deep-dive-ai-intelligence-engine)
-- [12. MongoDB Atlas Schema & Data Flow](#12-mongodb-atlas-schema--data-flow)
-- [13. REST API Specification](#13-rest-api-specification)
-- [14. AI Personalization & Dynamic Coupon Engine](#14-ai-personalization--dynamic-coupon-engine)
-- [15. AWS CloudWatch Observability & Telemetry](#15-aws-cloudwatch-observability--telemetry)
-- [16. Security, Isolation & Compliance](#16-security-isolation--compliance)
-- [17. Repository Folder Structure](#17-repository-folder-structure)
-- [18. Environment Variables Reference](#18-environment-variables-reference)
-- [19. Installation & Local Development](#19-installation--local-development)
-- [20. AWS Lambda Package Build & Production Deployment](#20-aws-lambda-package-build--production-deployment)
-- [21. End-to-End Verification & Testing Guide](#21-end-to-end-verification--testing-guide)
-- [22. Performance & Reliability Engineering](#22-performance--reliability-engineering)
-- [23. Business Impact & ROI Analysis](#23-business-impact--roi-analysis)
-- [24. Future Product Roadmap](#24-future-product-roadmap)
-- [25. Meet the AI Agents](#25-meet-the-ai-agents)
-- [26. Tech Stack Showcase](#26-tech-stack-showcase)
-- [27. Why RevenuePilot Wins Razorpay Buildathon](#27-why-revenuepilot-wins-razorpay-buildathon)
-- [28. 3-Minute Judge Presentation Script](#28-3-minute-judge-presentation-script)
-- [29. STEP 3 — Complete Workflow Image Prompts & Specification](#29-step-3--complete-workflow-image-prompts--specification)
-- [30. STEP 4 — Image Folder Structure & Markdown Embedding Reference](#30-step-4--image-folder-structure--markdown-embedding-reference)
-- [31. Contributors & License](#31-contributors--license)
+- [8. Reports Center & AWS Schedulers Workflow](#8-reports-center--aws-schedulers-workflow)
+- [9. Repository Deep-Dive: Frontend Architecture](#9-repository-deep-dive-frontend-architecture)
+- [10. Repository Deep-Dive: Backend Microservices](#10-repository-deep-dive-backend-microservices)
+- [11. Repository Deep-Dive: AWS Serverless Infrastructure](#11-repository-deep-dive-aws-serverless-infrastructure)
+- [12. Repository Deep-Dive: AI Intelligence Engine](#12-repository-deep-dive-ai-intelligence-engine)
+- [13. MongoDB Atlas Schema & Data Flow](#13-mongodb-atlas-schema--data-flow)
+- [14. REST API Specification](#14-rest-api-specification)
+- [15. AI Personalization & Dynamic Coupon Engine](#15-ai-personalization--dynamic-coupon-engine)
+- [16. AWS CloudWatch Observability & Telemetry](#16-aws-cloudwatch-observability--telemetry)
+- [17. Security, Isolation & Compliance](#17-security-isolation--compliance)
+- [18. Repository Folder Structure](#18-repository-folder-structure)
+- [19. Environment Variables Reference](#19-environment-variables-reference)
+- [20. Installation & Local Development](#20-installation--local-development)
+- [21. AWS Lambda Package Build & Production Deployment](#21-aws-lambda-package-build--production-deployment)
+- [22. End-to-End Verification & Testing Guide](#22-end-to-end-verification--testing-guide)
+- [23. Performance & Reliability Engineering](#23-performance--reliability-engineering)
+- [24. Business Impact & ROI Analysis](#24-business-impact--roi-analysis)
+- [25. Future Product Roadmap](#25-future-product-roadmap)
+- [26. Meet the AI Agents](#26-meet-the-ai-agents)
+- [27. Tech Stack Showcase](#27-tech-stack-showcase)
+- [28. Why RevenuePilot Wins Razorpay Buildathon](#28-why-revenuepilot-wins-razorpay-buildathon)
+- [29. 3-Minute Judge Presentation Script](#29-3-minute-judge-presentation-script)
+- [30. STEP 3 — Complete Workflow Image Prompts & Specification](#30-step-3--complete-workflow-image-prompts--specification)
+- [31. STEP 4 — Image Folder Structure & Markdown Embedding Reference](#31-step-4--image-folder-structure--markdown-embedding-reference)
+- [32. Contributors & License](#32-contributors--license)
 
 ---
 
@@ -82,20 +83,16 @@ When a payment drops due to 3DS timeouts, insufficient funds, or gateway errors,
 ## 2. Interactive Demo & Screenshots
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/demo_animation.gif" alt="RevenuePilot UI Animation" width="90%" />
+  <img src="docs/images/dashboard.png" alt="RevenuePilot Merchant Dashboard Screenshot" width="100%" />
 </p>
 
-| Merchant Dashboard | Scheduled Recovery Queue Modal |
+| Recovery Center (`/recovery`) | Automation & CloudWatch Center (`/automation`) |
 | :---: | :---: |
-| ![Dashboard Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/dashboard.png) | ![Scheduled Queue Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/scheduled_modal.png) |
+| ![Recovery Center Screenshot](docs/images/recovery-page.png) | ![Automation Center Screenshot](docs/images/automation-page.png) |
 
-| AI Copilot Assistant | Automation & CloudWatch Center |
+| AI Copilot Assistant (`/copilot`) | Executive Reports Center (`/reports`) |
 | :---: | :---: |
-| ![Copilot Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/copilot.png) | ![Automation Center Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/automation_center.png) |
-
-| PDF & CSV Reports Generator | Revenue Forecasting Models |
-| :---: | :---: |
-| ![Reports Center Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/reports_center.png) | ![Forecast Page Screenshot](https://raw.githubusercontent.com/Nishath06/RevenuePilot/main/assets/screenshots/forecast.png) |
+| ![AI Copilot Screenshot](docs/images/ai-copilot.png) | ![Reports Center Screenshot](docs/images/reports-page.png) |
 
 ---
 
@@ -251,10 +248,60 @@ sequenceDiagram
     UI->>API: Re-query fetchScheduledCandidates()
     API->>DB: Query status = "SCHEDULED"
     DB-->>API: Returns 0 candidates
-    UI->>UI: Refreshes Queue Counter to 0 & Closes Modal
 ```
 
 ---
+
+## 8. Reports Center & AWS Schedulers Workflow
+
+The **Reports Center (`ReportsCenter.tsx`)** operates in tandem with **AWS ReportsLambda**, **ReportLab**, **Amazon S3**, and **AWS EventBridge Crons** to generate verified executive PDF/CSV reports.
+
+<p align="center">
+  <img src="docs/images/reports-page.png" alt="Reports Center Interface Screenshot" width="100%" />
+</p>
+
+### Automated & On-Demand Report Generation Architecture
+
+```mermaid
+flowchart TD
+    subgraph UI Layer ["1. Merchant UI Request"]
+        Merchant["Merchant Portal / ReportsCenter.tsx"] -->|"1. Select Type (Revenue, Recovery, Security) & Format (PDF, CSV)"| ReportsUI["Reports Center UI"]
+        ReportsUI -->|"2. Click 'Generate Report' / Download"| BackendAPI["FastAPI /reports/generate"]
+    end
+
+    subgraph Automation & Scheduler ["2. AWS EventBridge Cron Scheduler"]
+        EventBridgeCron["AWS EventBridge Cron (Daily 00:00 UTC)"] -->|"3. Automated Cron Trigger"| ReportsLambda["AWS ReportsLambda"]
+    end
+
+    subgraph Execution & Engine ["3. ReportLab Engine & MongoDB Atlas"]
+        BackendAPI -->|"Invoke Service"| ReportsService["ReportsService Layer"]
+        ReportsService -->|"Fetch Orders, Payments, Audit Logs"| MongoDB[("MongoDB Atlas Cluster")]
+        ReportsLambda -->|"Query Transactional Tables"| MongoDB
+        MongoDB -->|"Return Raw BSON Data"| ReportsLambda
+        ReportsLambda -->|"Serialize BSON & Compute Metrics"| ReportLab["ReportLab PDF Generator Engine"]
+        ReportLab -->|"Build PDF Buffer (%PDF-1.4 Header >1KB)"| S3Uploader["AWS S3 Storage Layer"]
+    end
+
+    subgraph AWS Storage & Presigned URLs ["4. Amazon S3 Storage & Event Delivery"]
+        S3Uploader -->|"Put Object to Bucket"| S3Bucket["Amazon S3 Bucket (s3://revenuepilot-reports)"]
+        S3Bucket -->|"Generate 24-Hour Presigned URL"| PresignedURL["Signed Download URL"]
+        PresignedURL -->|"Save Metadata Record"| MongoReports[("MongoDB 'reports' Collection")]
+        ReportsLambda -->|"Publish Event REPORT_GENERATED"| EventBridgeBus["AWS EventBridge Bus"]
+        EventBridgeBus -->|"Put Telemetry Metrics"| CloudWatchLogs["AWS CloudWatch / AutoOps"]
+        PresignedURL -->|"Return URL to UI for Direct Download / Preview"| Merchant
+    end
+
+    style ReportsLambda fill:#FF9900,stroke:#333,stroke-width:2px,color:#fff
+    style S3Bucket fill:#569A31,stroke:#333,stroke-width:2px,color:#fff
+    style MongoDB fill:#47A248,stroke:#333,stroke-width:2px,color:#fff
+    style EventBridgeCron fill:#FF9900,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Technical Workflow Highlights
+1. **On-Demand & Automated Crons**: Reports can be triggered instantly from the UI or scheduled automatically via **AWS EventBridge (`cron(0 0 * * ? *)`)**.
+2. **Binary Header Validation**: `generate_pdf_reportlab()` produces a verified `%PDF-1.4` binary buffer with metric summary tables, recent order activity, and minimum **1 KB** size validation.
+3. **Amazon S3 Presigned URLs**: Generated reports are stored in Amazon S3 (`merchants/{merchant_id}/reports/{filename}`) with 24-hour presigned URLs generated via `boto3.client('s3').generate_presigned_url`.
+4. **Audit Trail**: Metadata records are stored atomically in MongoDB `reports` and `generated_reports` collections.
 
 ## 8. Repository Deep-Dive: Frontend Architecture
 
