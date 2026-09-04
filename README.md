@@ -658,7 +658,7 @@ For a merchant processing **₹50,000,000 ($600K USD)** annually:
 
 ## 29. Contributors
 
-- **J P Nishath** ([@Nishath06](https://github.com/Nishath06)) — *Lead AI & Full-Stack Architect*
+- **J P Nishath** ([@Nishath06](https://github.com/Nishath06)) — *Lead AI & Cloud Architect*
 
 ---
 
