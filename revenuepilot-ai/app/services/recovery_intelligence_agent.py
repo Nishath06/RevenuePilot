@@ -48,6 +48,31 @@ IS_LOCAL: bool = getattr(settings, "AWS_MODE", "local").lower() != "cloud"
 _sem: Optional[asyncio.Semaphore] = None
 
 
+def _parse_json_robust(raw: str) -> Dict[str, Any]:
+    """
+    Robust JSON parser for LLM responses.
+    Handles markdown fences, preambles/postambles, and unescaped control chars.
+    """
+    if not raw or not isinstance(raw, str):
+        raise ValueError("Empty or non-string response from LLM")
+    clean = re.sub(r"```(?:json)?|```", "", raw).strip()
+    start_idx = clean.find("{")
+    end_idx = clean.rfind("}")
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        clean = clean[start_idx : end_idx + 1]
+
+    try:
+        return json.loads(clean, strict=False)
+    except Exception:
+        pass
+
+    def sanitize(m):
+        return m.group(0).replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+    fixed = re.sub(r'"(?:[^"\\]|\\.)*"', sanitize, clean)
+    return json.loads(fixed, strict=False)
+
+
 def _get_semaphore() -> asyncio.Semaphore:
     global _sem
     if _sem is None:
@@ -84,10 +109,9 @@ async def _call_llm(prompt: str, trace_id: str) -> Dict[str, Any]:
                     ],
                     temperature=0.3,
                     max_tokens=1200,
+                    response_format={"type": "json_object"},
                 )
-                # Strip markdown fences if present
-                clean = re.sub(r"```(?:json)?|```", "", raw).strip()
-                parsed = json.loads(clean)
+                parsed = _parse_json_robust(raw)
                 latency_ms = round((time.perf_counter() - start) * 1000, 2)
                 _emit_cloudwatch("AverageLLMLatency", latency_ms)
                 return parsed

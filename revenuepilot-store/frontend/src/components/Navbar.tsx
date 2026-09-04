@@ -6,10 +6,16 @@ import { useCartStore } from '../store/cartStore';
 
 export const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
-  const { items } = useCartStore();
+  const { items, fetchCart } = useCartStore();
   const navigate = useNavigate();
 
-  const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      fetchCart();
+    }
+  }, [isAuthenticated]);
+
+  const totalItemsCount = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
   const handleLogout = () => {
     logout();

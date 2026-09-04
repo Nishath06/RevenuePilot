@@ -138,6 +138,8 @@ class GeminiProvider(BaseLLMProvider):
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        if "response_format" in kwargs:
+            body["response_format"] = kwargs["response_format"]
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             res = await client.post(url, headers=headers, json=body)

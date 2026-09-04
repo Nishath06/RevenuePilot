@@ -156,10 +156,10 @@ async def seed_users_if_empty():
             await user.save()
 
 async def seed_products_if_empty():
-    count = await Product.count()
-    if count == 0:
-        logger.info("No products found in DB. Seeding 10 realistic electronics products...")
-        for p in SAMPLE_PRODUCTS:
+    inserted_count = 0
+    for p in SAMPLE_PRODUCTS:
+        existing = await Product.find_one(Product.product_id == p["product_id"])
+        if not existing:
             product = Product(
                 product_id=p["product_id"],
                 title=p["title"],
@@ -173,6 +173,11 @@ async def seed_products_if_empty():
                 created_at=datetime.now(timezone.utc)
             )
             await product.insert()
-        logger.info("Database successfully seeded with 10 electronics products.")
+            inserted_count += 1
+
+    total_count = await Product.count()
+    if inserted_count > 0:
+        logger.info(f"Seeded {inserted_count} core electronics products. Total products in DB: {total_count}.")
     else:
-        logger.info(f"Database already contains {count} products. Skipping seeding.")
+        logger.info(f"Database already contains {total_count} products (core products present).")
+

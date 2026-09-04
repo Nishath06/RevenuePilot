@@ -14,19 +14,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     addItem(product, 1);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };
 
+  const pId = product.product_id || (product as any).id || (product as any)._id || '';
+  const imageUrl = (product.images && product.images.length > 0)
+    ? product.images[0]
+    : ((product as any).image_url || (product as any).image || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&auto=format&fit=crop&q=80');
+
   return (
     <div className="group bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col overflow-hidden">
       
       {/* Image Container */}
-      <Link to={`/products/${product.product_id}`} className="relative block aspect-[4/3] bg-slate-100 overflow-hidden">
+      <Link to={`/products/${pId}`} className="relative block aspect-[4/3] bg-slate-100 overflow-hidden">
         <img
-          src={product.images[0] || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&auto=format&fit=crop&q=80'}
-          alt={product.title}
+          src={imageUrl}
+          alt={product.title || (product as any).name || 'Product'}
           className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
           loading="lazy"
         />
@@ -47,9 +53,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </div>
           </div>
 
-          <Link to={`/products/${product.product_id}`} className="block group-hover:text-emerald-600 transition-colors">
+          <Link to={`/products/${pId}`} className="block group-hover:text-emerald-600 transition-colors">
             <h3 className="text-base font-bold text-slate-900 line-clamp-1">
-              {product.title}
+              {product.title || (product as any).name || 'Product'}
             </h3>
           </Link>
           <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">

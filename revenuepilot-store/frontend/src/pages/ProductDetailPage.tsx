@@ -61,8 +61,8 @@ export const ProductDetailPage: React.FC = () => {
         <div className="space-y-4">
           <div className="aspect-square bg-slate-100 rounded-2xl overflow-hidden border border-slate-200">
             <img
-              src={product.images[0] || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&auto=format&fit=crop&q=80'}
-              alt={product.title}
+              src={(product.images && product.images.length > 0) ? product.images[0] : ((product as any).image_url || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&auto=format&fit=crop&q=80')}
+              alt={product.title || (product as any).name || 'Product'}
               className="w-full h-full object-cover object-center"
             />
           </div>
@@ -82,7 +82,7 @@ export const ProductDetailPage: React.FC = () => {
             </div>
 
             <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">
-              {product.title}
+              {product.title || (product as any).name || 'Product'}
             </h1>
 
             <div className="flex items-center gap-3 text-sm text-slate-500">
@@ -92,13 +92,13 @@ export const ProductDetailPage: React.FC = () => {
               </div>
               <span>•</span>
               <span className="text-emerald-600 font-medium flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4" /> In Stock ({product.stock} units)
+                <CheckCircle2 className="w-4 h-4" /> In Stock ({product.stock ?? 10} units)
               </span>
             </div>
 
             <div className="py-4 border-y border-slate-100">
               <span className="text-3xl font-extrabold text-slate-900">
-                ₹{product.price.toLocaleString('en-IN')}
+                ₹{Number(product.price || 0).toLocaleString('en-IN')}
               </span>
               <span className="text-xs text-slate-400 block mt-0.5">Inclusive of all taxes & Razorpay Test Mode</span>
             </div>
@@ -109,7 +109,7 @@ export const ProductDetailPage: React.FC = () => {
 
             {/* Tags */}
             <div className="flex flex-wrap gap-2 pt-2">
-              {product.tags.map((tag) => (
+              {(product.tags || []).map((tag) => (
                 <span key={tag} className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg flex items-center gap-1">
                   <Tag className="w-3 h-3 text-slate-400" /> #{tag}
                 </span>

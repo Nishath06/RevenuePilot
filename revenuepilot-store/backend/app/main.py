@@ -82,3 +82,5 @@ async def root():
 @app.get(f"{settings.API_V1_STR}/health")
 async def health_check():
     return {"status": "healthy"}
+
+
