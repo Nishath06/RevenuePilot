@@ -11,7 +11,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { automationAPI } from '../services/api';
+import { automationAPI, aiAPI } from '../services/api';
 import { KPICard } from '../components/cards/KPICard';
 
 type TabType =
@@ -77,7 +77,7 @@ export const AutomationCenter: React.FC = () => {
   const handleAnalyzeCustomers = async () => {
     setIsAnalyzing(true);
     try {
-      const res = await automationAPI.analyzeRecovery();
+      const res = await aiAPI.analyzeRecovery();
       setAnalysisResult(res.data);
       setShowAnalysisSuccess(true);
       // Refresh candidates list
@@ -92,7 +92,7 @@ export const AutomationCenter: React.FC = () => {
 
   const loadRecoveryCandidates = async () => {
     try {
-      const res = await automationAPI.getRecoveryCandidates();
+      const res = await aiAPI.getScheduledCandidates();
       setCandidates(res.data.candidates || []);
     } catch (err) {
       console.error(err);

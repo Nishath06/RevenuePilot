@@ -1,0 +1,123 @@
+# ==============================================================================
+# RevenuePilot — Root Docker Compose
+# Orchestrates all 4 services on a shared bridge network
+#
+# Services:
+#   store-backend       → http://localhost:8000   (FastAPI Store API)
+#   revenuepilot-ai     → http://localhost:8001   (FastAPI AI Microservice)
+#   store-frontend      → http://localhost:3000   (React Store App)
+#   merchant-frontend   → http://localhost:3001   (React Merchant Dashboard)
+#
+# Usage:
+#   docker compose up --build -d
+#   docker compose logs -f
+#   docker compose down
+# ==============================================================================
+
+name: revenuepilot
+
+networks:
+  revenuepilot-network:
+    driver: bridge
+    name: revenuepilot-network
+
+services:
+
+  # ── Store Backend (FastAPI) ─────────────────────────────────────────────────
+  store-backend:
+    build:
+      context: ./revenuepilot-store/backend
+      dockerfile: Dockerfile
+    container_name: revenuepilot_store_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./revenuepilot-store/.env
+    environment:
+      - ENVIRONMENT=production
+      # Override MONGODB_URL: inside container, 'localhost' means the container itself.
+      # Use host.docker.internal to reach MongoDB on the host machine.
+      - MONGODB_URL=mongodb://host.docker.internal:27017
+    networks:
+      - revenuepilot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── RevenuePilot AI Microservice (FastAPI) ─────────────────────────────────
+  revenuepilot-ai:
+    build:
+      context: ./revenuepilot-ai
+      dockerfile: Dockerfile
+    container_name: revenuepilot_ai
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./revenuepilot-ai/.env
+    environment:
+      - ENVIRONMENT=production
+      - STORE_BACKEND_URL=http://store-backend:8000
+    networks:
+      - revenuepilot-network
+    depends_on:
+      store-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Store Customer Frontend (React → Nginx) ─────────────────────────────────
+  store-frontend:
+    build:
+      context: ./revenuepilot-store/frontend
+      dockerfile: Dockerfile
+    container_name: revenuepilot_store_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    networks:
+      - revenuepilot-network
+    depends_on:
+      store-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # ── Merchant Dashboard Frontend (React → Nginx) ─────────────────────────────
+  merchant-frontend:
+    build:
+      context: ./revenuepilot-merchant/frontend
+      dockerfile: Dockerfile
+    container_name: revenuepilot_merchant_frontend
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    networks:
+      - revenuepilot-network
+    depends_on:
+      store-backend:
+        condition: service_healthy
+      revenuepilot-ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
