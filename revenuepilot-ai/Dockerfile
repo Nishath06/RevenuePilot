@@ -1,66 +1,77 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# RevenuePilot AI Microservice — Production Dockerfile
-# Stage 1: Build virtual environment & dependencies
-# Stage 2: Minimal hardened Python 3.12 slim-bookworm runtime
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# RevenuePilot AI — Production Dockerfile
+# FastAPI + AI Agents + Multi-stage Build + Trivy Optimized
+# =============================================================================
 
-# ── Stage 1: Builder ─────────────────────────────────────────────────────────
+############################
+# Stage 1 — Builder
+############################
 FROM python:3.12-slim-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-# Upgrade OS packages & install build essentials
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
+# Install only packages required to compile Python wheels.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Create clean virtual environment
+# Create isolated virtual environment.
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Upgrade core package management tools to latest patched versions
+# Copy dependency file first for Docker cache.
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
 
-# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM python:3.12-slim-bookworm AS runtime
+# Upgrade packaging tools and install dependencies.
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install -r requirements.txt
 
-LABEL maintainer="RevenuePilot AI Team" \
-      version="1.0.0" \
-      description="RevenuePilot AI Microservice"
+############################
+# Stage 2 — Runtime
+############################
+FROM python:3.12-slim-bookworm
 
-# Upgrade runtime OS packages to eliminate Trivy vulnerabilities
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+LABEL org.opencontainers.image.title="RevenuePilot AI" \
+      org.opencontainers.image.description="AI Microservice for RevenuePilot" \
+      org.opencontainers.image.version="1.0.0"
 
-# Copy virtualenv from builder stage
-COPY --from=builder /opt/venv /opt/venv
-
-ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONDONTWRITEBYTECODE=1 \
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
     PORT=8001
 
 WORKDIR /app
 
-# Create non-root system user and group
-RUN addgroup --system --gid 1001 appgroup && \
-    adduser --system --uid 1001 --ingroup appgroup appuser
+# Install only runtime certificates.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy application source code (local virtualenvs excluded via .dockerignore)
-COPY --chown=appuser:appgroup . .
+# Copy virtual environment from builder.
+COPY --from=builder /opt/venv /opt/venv
 
-# Switch to unprivileged user
+# Create non-root user.
+RUN groupadd --system appgroup && \
+    useradd --system --gid appgroup --create-home appuser
+
+# Copy only application code.
+COPY --chown=appuser:appgroup app ./app
+COPY --chown=appuser:appgroup aws_lambda ./aws_lambda
+COPY --chown=appuser:appgroup scripts ./scripts
+COPY --chown=appuser:appgroup requirements.txt .
+COPY --chown=appuser:appgroup pytest.ini .
+
 USER appuser
 
 EXPOSE 8001
 
-# Container healthcheck using FastAPI /health route
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8001/health || exit 1
+# FastAPI health endpoint.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health').read()"
 
-# Start Uvicorn ASGI server
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
