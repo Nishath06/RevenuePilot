@@ -57,7 +57,6 @@ jobs:
       JWT_SECRET: ${{ vars.JWT_SECRET }}
       JWT_ALGORITHM: ${{ vars.JWT_ALGORITHM }}
       
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -239,7 +238,7 @@ jobs:
         run: docker load -i ${{ matrix.image }}.tar
 
       - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
           format: table
