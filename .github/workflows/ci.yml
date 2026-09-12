@@ -54,7 +54,7 @@ jobs:
 
       # Local services
       MONGODB_URL: ${{ secrets.MONGODB_URL }}
-  DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
 
 
     steps:
