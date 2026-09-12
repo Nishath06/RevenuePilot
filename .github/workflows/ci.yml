@@ -26,7 +26,12 @@ jobs:
     runs-on: ubuntu-latest
 
     # No redis service — Redis is not used in this project.
-    # MongoDB Atlas is used via the MONGODB_URL secret; no local mongo needed.
+    # MongoDB is available locally for CI fallback when secrets are unavailable.
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
 
     env:
       # ── App ──────────────────────────────────────────────────
@@ -34,8 +39,8 @@ jobs:
       DEBUG: "false"
 
       # ── MongoDB Atlas ─────────────────────────────────────────
-      MONGODB_URL: ${{ secrets.MONGODB_URL }}
-      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      MONGODB_URL: ${{ secrets.MONGODB_URL || 'mongodb://localhost:27017' }}
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME || 'revenuepilot_test' }}
 
       # ── JWT / Auth ────────────────────────────────────────────
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
