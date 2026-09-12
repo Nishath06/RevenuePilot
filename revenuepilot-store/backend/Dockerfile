@@ -15,13 +15,13 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
+# Create clean virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
+# Upgrade core package management tools to latest patched versions
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser
 
-# Copy application source code
+# Copy application source code (local virtualenvs excluded via .dockerignore)
 COPY --chown=appuser:appgroup . .
 
 # Switch to unprivileged user

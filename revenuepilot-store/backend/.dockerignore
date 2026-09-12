@@ -1,17 +1,71 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+# Virtual Environments (Local dev envs must never be copied into Docker image)
+.venv*
+venv*
+env*
+.*venv*
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 .Python
-venv
-.venv
-env
+
+# Caches & Test Artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+tests/
+
+# Build & Package Metadata
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment Files & Local Secrets
 .env
-*.egg-info
-.pytest_cache
-tests
-.git
+.env.*
+!.env.example
+
+# Git & CI/CD Metadata
+.git/
 .gitignore
-*.md
+.gitattributes
+.github/
+
+# IDE & Editor Configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs & Temporary Scratch Files
+*.log
 server.log
 server.err
+scratch/
+README.md
