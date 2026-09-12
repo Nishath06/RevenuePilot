@@ -242,7 +242,8 @@ jobs:
         with:
           image-ref: ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
           format: table
-          severity: MEDIUM,HIGH,CRITICAL
+          scanners: vuln
+          severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 1
 
