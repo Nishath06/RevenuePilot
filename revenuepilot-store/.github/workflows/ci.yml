@@ -2,9 +2,16 @@ name: RevenuePilot Store CI Pipeline
 
 on:
   push:
-    branches: [ main, master, dev ]
+    branches: [main, master, dev]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
+
+env:
+  # Pinned security versions — must match revenuepilot-store/backend/Dockerfile
+  EXPECTED_SETUPTOOLS: "84.0.0"
+  EXPECTED_WHEEL: "0.46.2"
+  EXPECTED_MSGPACK: "1.2.1"
+  EXPECTED_JARACO_CONTEXT: "6.1.2"
 
 jobs:
   backend-ci:
@@ -30,8 +37,20 @@ jobs:
 
       - name: Install backend dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r revenuepilot-store/backend/requirements.txt
+          python -m pip install --no-cache-dir --upgrade pip
+          # Install pinned security packages FIRST to prevent transitive downgrade
+          pip install --no-cache-dir \
+            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+            "wheel==${{ env.EXPECTED_WHEEL }}" \
+            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
+          pip install --no-cache-dir -r revenuepilot-store/backend/requirements.txt
+          # Re-assert pins after requirements.txt
+          pip install --no-cache-dir --upgrade \
+            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+            "wheel==${{ env.EXPECTED_WHEEL }}" \
+            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
 
       - name: Run Backend Tests
         env:
@@ -81,18 +100,58 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # --pull: always fetch latest base image
+      # --no-cache: prevents stale Docker layer cache
       - name: Build Backend Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: revenuepilot-store/backend
           file: revenuepilot-store/backend/Dockerfile
           push: false
+          load: true
+          no-cache: true
+          pull: true
           tags: revenuepilot-backend:ci
 
+      - name: Verify Backend Python Package Versions
+        run: |
+          echo "🔍 Verifying security package versions in revenuepilot-backend:ci"
+          docker run --rm revenuepilot-backend:ci python -c "
+          import importlib.metadata as md, sys
+
+          expected = {
+              'setuptools':     '${{ env.EXPECTED_SETUPTOOLS }}',
+              'wheel':          '${{ env.EXPECTED_WHEEL }}',
+              'msgpack':        '${{ env.EXPECTED_MSGPACK }}',
+              'jaraco.context': '${{ env.EXPECTED_JARACO_CONTEXT }}',
+          }
+
+          failures = []
+          for pkg, required_ver in expected.items():
+              try:
+                  actual_ver = md.version(pkg)
+                  if actual_ver == required_ver:
+                      print(f'  ✅ {pkg}: {actual_ver}')
+                  else:
+                      print(f'  ❌ {pkg}: {actual_ver} (expected {required_ver})')
+                      failures.append(f'{pkg} expected={required_ver} actual={actual_ver}')
+              except md.PackageNotFoundError:
+                  print(f'  ❌ {pkg}: NOT FOUND')
+                  failures.append(f'{pkg} not installed')
+
+          if failures:
+              print('SECURITY VIOLATION: Package version mismatch!')
+              sys.exit(1)
+          print('✅ All security package versions verified.')
+          "
+
       - name: Build Frontend Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: revenuepilot-store/frontend
           file: revenuepilot-store/frontend/Dockerfile
           push: false
+          load: true
+          no-cache: true
+          pull: true
           tags: revenuepilot-frontend:ci

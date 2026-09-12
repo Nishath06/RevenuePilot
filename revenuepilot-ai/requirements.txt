@@ -1,45 +1,56 @@
-# FastAPI & ASGI
+# =============================================================================
+# RevenuePilot AI — Python Dependencies
+#
+# SECURITY PINS (must match Dockerfile and ci.yml env vars):
+#   setuptools, wheel, msgpack, jaraco.context are pinned to specific versions
+#   to remediate Trivy HIGH/CRITICAL CVEs. Do NOT remove or relax these pins.
+#   Update them only when a newer patched version is available.
+# =============================================================================
+
+# ── Security Patches (pinned — DO NOT remove or relax) ─────────────────────
+# These MUST appear first so pip resolves them before transitive dependencies.
+setuptools==84.0.0
+wheel==0.46.2
+msgpack==1.2.1
+jaraco.context==6.1.2
+
+# ── FastAPI & ASGI ───────────────────────────────────────────────────────────
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
 
-# MongoDB (async) — versions resolved by pip for agno compatibility
+# ── MongoDB (async) ──────────────────────────────────────────────────────────
 motor>=3.5.0
 pymongo>=4.6.0
 
-# AI / Agent Framework
+# ── AI / Agent Framework ─────────────────────────────────────────────────────
 agno>=2.9.0
 openai>=1.55.0
 langgraph>=0.2.0
 
-# Settings & Validation
+# ── Settings & Validation ────────────────────────────────────────────────────
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
 PyJWT>=2.8.0
 bcrypt>=4.0.0
 
-# Logging
+# ── Logging ──────────────────────────────────────────────────────────────────
 structlog>=24.4.0
 
-# HTTP Client
+# ── HTTP Client ──────────────────────────────────────────────────────────────
 httpx>=0.27.0
 
-# Utilities & Security Patches
+# ── Utilities ────────────────────────────────────────────────────────────────
 python-dotenv>=1.0.0
 reportlab>=4.0.0
 
-
-msgpack==1.2.1
-jaraco.context==6.1.2
-setuptools==84.0.0
-wheel==0.46.2
-# Testing
+# ── Testing ──────────────────────────────────────────────────────────────────
 pytest>=8.3.0
 pytest-asyncio>=0.24.0
 
-# AWS / Cloud Integration
+# ── AWS / Cloud Integration ──────────────────────────────────────────────────
 boto3>=1.34.0
 botocore>=1.34.0
 
-# Scheduling
+# ── Scheduling ───────────────────────────────────────────────────────────────
 apscheduler>=3.10.0

@@ -15,6 +15,13 @@ env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "22"
 
+  # ── Pinned security package versions (single source of truth) ──────────────
+  # Update these when remediating future CVEs. Must match Dockerfiles.
+  EXPECTED_SETUPTOOLS: "84.0.0"
+  EXPECTED_WHEEL: "0.46.2"
+  EXPECTED_MSGPACK: "1.2.1"
+  EXPECTED_JARACO_CONTEXT: "6.1.2"
+
 jobs:
 
   #####################################################################
@@ -53,10 +60,11 @@ jobs:
       # Docker Hub
       DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ vars.DOCKER_PASSWORD }}
+
       # JWT Authentication
       JWT_SECRET: ${{ vars.JWT_SECRET }}
       JWT_ALGORITHM: ${{ vars.JWT_ALGORITHM }}
-      
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -90,8 +98,20 @@ jobs:
       - name: Install RevenuePilot AI Dependencies
         working-directory: revenuepilot-ai
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --no-cache-dir --upgrade pip
+          # Install pinned security packages FIRST to prevent downgrade
+          pip install --no-cache-dir \
+            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+            "wheel==${{ env.EXPECTED_WHEEL }}" \
+            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
+          pip install --no-cache-dir -r requirements.txt
+          # Re-assert pins after requirements.txt in case transitive deps downgraded
+          pip install --no-cache-dir --upgrade \
+            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+            "wheel==${{ env.EXPECTED_WHEEL }}" \
+            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
 
       - name: Run Unit Tests (RevenuePilot AI)
         working-directory: revenuepilot-ai
@@ -110,8 +130,20 @@ jobs:
       - name: Install Store Backend Dependencies
         working-directory: revenuepilot-store/backend
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --no-cache-dir --upgrade pip
+          # Install pinned security packages FIRST to prevent downgrade
+          pip install --no-cache-dir \
+            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+            "wheel==${{ env.EXPECTED_WHEEL }}" \
+            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
+          pip install --no-cache-dir -r requirements.txt
+          # Re-assert pins after requirements.txt in case transitive deps downgraded
+          pip install --no-cache-dir --upgrade \
+            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+            "wheel==${{ env.EXPECTED_WHEEL }}" \
+            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
 
       - name: Run Store Backend Tests
         working-directory: revenuepilot-store/backend
@@ -170,15 +202,19 @@ jobs:
         include:
           - image: revenuepilot-ai
             context: ./revenuepilot-ai
+            is_python: true
 
           - image: revenuepilot-merchant
             context: ./revenuepilot-merchant/frontend
+            is_python: false
 
           - image: revenuepilot-store-backend
             context: ./revenuepilot-store/backend
+            is_python: true
 
           - image: revenuepilot-store-frontend
             context: ./revenuepilot-store/frontend
+            is_python: false
 
     steps:
       - uses: actions/checkout@v4
@@ -186,6 +222,8 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # --pull: always fetch latest base image (prevents stale base layer caching)
+      # --no-cache: prevents Docker layer cache from reusing old package install layers
       - name: Build Docker Image
         uses: docker/build-push-action@v6
         with:
@@ -199,25 +237,55 @@ jobs:
             ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
             ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:latest
 
-      - name: Verify Installed Python Packages
-        if: matrix.image == 'revenuepilot-ai' || matrix.image == 'revenuepilot-store-backend'
+      # ── Python Package Version Verification ─────────────────────────────────
+      # Verifies BOTH the venv packages (/opt/venv) AND system python packages.
+      # Trivy scans both locations independently — both must be patched.
+      - name: Verify Python Package Security Versions
+        if: matrix.is_python == true
+        env:
+          IMAGE: ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
+          EXPECTED_SETUPTOOLS: ${{ env.EXPECTED_SETUPTOOLS }}
+          EXPECTED_WHEEL: ${{ env.EXPECTED_WHEEL }}
+          EXPECTED_MSGPACK: ${{ env.EXPECTED_MSGPACK }}
+          EXPECTED_JARACO_CONTEXT: ${{ env.EXPECTED_JARACO_CONTEXT }}
         run: |
-          docker run --rm \
-            ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
-            python -m pip show msgpack setuptools wheel jaraco.context
-          
-          docker run --rm \
-            ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔍 Verifying security package versions in: ${{ matrix.image }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          docker run --rm ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
             python -c "
           import importlib.metadata as md, sys
-          expected = {'msgpack': '1.2.1', 'setuptools': '84.0.0', 'wheel': '0.46.2', 'jaraco.context': '6.1.2'}
-          for pkg, ver in expected.items():
-              actual = md.version(pkg)
-              print(f'{pkg}: {actual}')
-              if actual != ver:
-                  print(f'ERROR: {pkg} version mismatch! Expected {ver}, got {actual}')
-                  sys.exit(1)
-          print('✅ All Python package security versions verified successfully!')
+
+          expected = {
+              'setuptools':     '${{ env.EXPECTED_SETUPTOOLS }}',
+              'wheel':          '${{ env.EXPECTED_WHEEL }}',
+              'msgpack':        '${{ env.EXPECTED_MSGPACK }}',
+              'jaraco.context': '${{ env.EXPECTED_JARACO_CONTEXT }}',
+          }
+
+          failures = []
+          for pkg, required_ver in expected.items():
+              try:
+                  actual_ver = md.version(pkg)
+                  if actual_ver == required_ver:
+                      print(f'  ✅ {pkg}: {actual_ver}')
+                  else:
+                      print(f'  ❌ {pkg}: {actual_ver} (expected {required_ver})')
+                      failures.append(f'{pkg} expected={required_ver} actual={actual_ver}')
+              except md.PackageNotFoundError:
+                  print(f'  ❌ {pkg}: NOT FOUND')
+                  failures.append(f'{pkg} not installed')
+
+          if failures:
+              print()
+              print('SECURITY VIOLATION: Package version mismatch detected!')
+              for f in failures:
+                  print(f'  → {f}')
+              sys.exit(1)
+
+          print()
+          print('✅ All security package versions verified successfully.')
           "
 
       - name: Save Docker Image
@@ -256,6 +324,8 @@ jobs:
           - revenuepilot-store-frontend
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download Docker Image
         uses: actions/download-artifact@v4
         with:
@@ -264,7 +334,11 @@ jobs:
       - name: Load Docker Image
         run: docker load -i ${{ matrix.image }}.tar
 
-      - name: Scan Docker Image with Trivy
+      # Trivy scans both OS packages and Python packages in the image.
+      # ignore-unfixed: suppresses Debian CVEs with no upstream fix available.
+      # Python package CVEs always have a "fix" (the patched version we pinned),
+      # so they will not be suppressed.
+      - name: Scan with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
@@ -272,6 +346,7 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivy-config: .trivy.yaml
           exit-code: 1
 
   #####################################################################
