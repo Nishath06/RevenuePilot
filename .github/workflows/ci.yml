@@ -56,7 +56,7 @@ jobs:
       # JWT Authentication
       JWT_SECRET: ${{ vars.JWT_SECRET }}
       JWT_ALGORITHM: ${{ vars.JWT_ALGORITHM }}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${{ vars.ACCESS_TOKEN_EXPIRE_MINUTES }}
+      
 
     steps:
       - name: Checkout Repository
