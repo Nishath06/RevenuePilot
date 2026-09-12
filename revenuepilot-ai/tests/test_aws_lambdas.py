@@ -2,6 +2,9 @@
 RevenuePilot v3.0 — Comprehensive AWS Lambda Unit & Integration Test Suite
 Tests all 5 refactored AWS Lambda functions, shared utilities, MongoDB BSON serialization,
 PDF header (%PDF-) & size validation, 48h deduplication, and EventBridge publishing in local and AWS modes.
+
+All AWS Lambda imports are intentionally LAZY (inside test bodies) so that
+`pytest -m unit` can collect this file without importing any AWS/bson modules.
 """
 
 import sys
@@ -10,23 +13,9 @@ import json
 import uuid
 import pytest
 from datetime import datetime, timezone
-from bson import ObjectId, Decimal128
 
-# Ensure root workspace directory is in python path
+# Ensure root workspace directory is in python path so aws_lambda package is found
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from aws_lambda.utils.aws_lambda_base import (
-    serialize_bson,
-    get_database,
-    publish_eventbridge_event,
-    config,
-    handle_lambda_exceptions
-)
-from aws_lambda.inventory_lambda import lambda_handler as inventory_handler
-from aws_lambda.recovery_lambda import lambda_handler as recovery_handler
-from aws_lambda.reports_lambda import lambda_handler as reports_handler
-from aws_lambda.incident_lambda import lambda_handler as incident_handler
-from aws_lambda.cloudwatch_lambda import lambda_handler as cloudwatch_handler
 
 # Lambda handler tests run locally with graceful fallback (no live AWS required for most)
 pytestmark = [pytest.mark.unit, pytest.mark.aws]
@@ -38,6 +27,9 @@ class DummyContext:
 
 def test_serialize_bson():
     """Test BSON & Datetime serialization into JSON-compliant structures."""
+    from bson import ObjectId, Decimal128
+    from aws_lambda.utils.aws_lambda_base import serialize_bson
+
     now_dt = datetime.now(timezone.utc)
     dummy_oid = ObjectId()
     dummy_dec = Decimal128("149.99")
@@ -65,6 +57,8 @@ def test_serialize_bson():
 
 def test_inventory_lambda():
     """Test InventoryLambda execution, stock velocity, and LOW/OUT status classification."""
+    from aws_lambda.inventory_lambda import lambda_handler as inventory_handler
+
     payload = {
         "merchant_id": "merch_unit_test",
         "trace_id": "trace_inv_test_001",
@@ -89,6 +83,8 @@ def test_inventory_lambda():
 
 def test_recovery_lambda():
     """Test RecoveryLambda coupon generation, target email sanitization, and 48h deduplication."""
+    from aws_lambda.recovery_lambda import lambda_handler as recovery_handler
+
     unique_email = f"anita_{uuid.uuid4().hex[:6]}@example.com"
     payload = {
         "merchant_id": "merch_unit_test",
@@ -112,6 +108,8 @@ def test_recovery_lambda():
 
 def test_reports_lambda_pdf_and_csv():
     """Test ReportsLambda PDF generation (%PDF- magic header & > 1 KB size) and CSV formatting."""
+    from aws_lambda.reports_lambda import lambda_handler as reports_handler
+
     # 1. PDF Test
     pdf_payload = {
         "merchant_id": "merch_unit_test",
@@ -145,6 +143,8 @@ def test_reports_lambda_pdf_and_csv():
 
 def test_incident_lambda():
     """Test IncidentLambda severity validation, INC ID formatting, and SNS dispatch logic."""
+    from aws_lambda.incident_lambda import lambda_handler as incident_handler
+
     payload = {
         "merchant_id": "merch_unit_test",
         "incident_type": "WEBHOOK_TIMEOUT",
@@ -165,6 +165,8 @@ def test_incident_lambda():
 
 def test_cloudwatch_lambda():
     """Test CloudWatchLambda telemetry collection across all 9 metrics."""
+    from aws_lambda.cloudwatch_lambda import lambda_handler as cloudwatch_handler
+
     payload = {
         "merchant_id": "merch_unit_test",
         "metrics": {
@@ -190,6 +192,8 @@ def test_cloudwatch_lambda():
 
 def test_incident_cooldown_deduplication():
     """Test IncidentLambda cooldown deduplication logic."""
+    from aws_lambda.incident_lambda import lambda_handler as incident_handler
+
     unique_type = f"TEST_COOLDOWN_{uuid.uuid4().hex[:6]}"
     payload = {
         "merchant_id": "merch_unit_test",
@@ -219,20 +223,23 @@ def test_incident_cooldown_deduplication():
 @pytest.mark.asyncio
 async def test_pdf_report_service_generation():
     """Test reports_service.generate_report for PDF format to ensure JSON safety and valid binary header."""
+    import base64
     from app.db.mongodb import connect_to_mongodb
     from app.services.reports_service import reports_service
+
     await connect_to_mongodb()
     rep = await reports_service.generate_report(report_type="revenue", format_type="pdf", date_range="7d")
     assert rep["status"] == "COMPLETED"
     assert rep["format"] == "pdf"
     assert isinstance(rep["content"], str)
-    import base64
     decoded = base64.b64decode(rep["content"])
     assert decoded[:5] == b"%PDF-"
 
 
 def test_recovery_dispatch_lambda_scheduled_and_metrics():
     """Test RecoveryLambda queries scheduled candidates, updates status/history, and outputs JSON summary."""
+    from aws_lambda.recovery_lambda import lambda_handler as recovery_handler
+
     cand_id = f"cand_sched_{uuid.uuid4().hex[:8]}"
     payload = {
         "candidate_id": cand_id,
@@ -258,6 +265,3 @@ def test_recovery_dispatch_lambda_scheduled_and_metrics():
     assert body["sms_sent"] >= 1
     assert body["failures"] == 0
     assert "execution_time_ms" in body
-
-
-

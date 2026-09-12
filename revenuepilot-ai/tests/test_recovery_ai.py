@@ -21,8 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# All tests in this file are pure unit tests — external I/O is fully mocked
-pytestmark = [pytest.mark.unit]
+# Per user's CI categorisation: recovery AI tests are integration tests
+pytestmark = [pytest.mark.integration]
 
 from app.services.recovery_scoring import (
     CustomerFeatures,

@@ -1,25 +1,19 @@
 """
 RevenuePilot AI — AWS Integration & Health Endpoint Unit Tests
 Verifies EventBridge, SNS, S3, CloudWatch, AWS Client, and /automation/aws-health.
+
+All AWS service imports are lazy (inside test bodies) so `pytest -m unit` never
+touches boto3 or AWS modules during collection.
 """
 import pytest
-from fastapi.testclient import TestClient
-
-from app.main import app
-from app.services.aws_client import aws_client
-from app.services.aws_eventbridge import publish_event, aws_manager
-from app.services.aws_sns import send_notification
-from app.services.aws_s3 import upload_report, generate_signed_url
-from app.services.aws_cloudwatch import put_metric, put_log_event
 
 # All tests here call AWS SDK services (with graceful local fallback)
 pytestmark = [pytest.mark.integration, pytest.mark.aws]
 
-client = TestClient(app)
-
 
 def test_aws_client_verification():
     """Verify AWS Client connectivity check structure."""
+    from app.services.aws_client import aws_client
     res = aws_client.verify_connectivity()
     assert "overall_status" in res
     assert "services" in res
@@ -37,6 +31,7 @@ def test_aws_client_verification():
 
 def test_aws_eventbridge_publish():
     """Verify publish_event with graceful local fallback."""
+    from app.services.aws_eventbridge import publish_event
     res = publish_event(
         event_type="TEST_ORDER_CREATED",
         detail={"order_id": "ord_123", "amount": 1999},
@@ -48,6 +43,7 @@ def test_aws_eventbridge_publish():
 
 def test_aws_sns_send_notification():
     """Verify send_notification with graceful local fallback."""
+    from app.services.aws_sns import send_notification
     res = send_notification(
         topic_type_or_arn="payments",
         message="Test alert from pytest",
@@ -59,6 +55,7 @@ def test_aws_sns_send_notification():
 
 def test_aws_s3_upload_and_signed_url():
     """Verify S3 report upload and presigned URL generation."""
+    from app.services.aws_s3 import upload_report, generate_signed_url
     upload_res = upload_report(
         file_content="header1,header2\nval1,val2",
         object_name="pytest_report.csv",
@@ -75,6 +72,7 @@ def test_aws_s3_upload_and_signed_url():
 
 def test_aws_cloudwatch_metrics_and_logs():
     """Verify put_metric and put_log_event."""
+    from app.services.aws_cloudwatch import put_metric, put_log_event
     metric_res = put_metric(
         metric_name="PytestTestMetric",
         value=42.0,
@@ -91,6 +89,9 @@ def test_aws_cloudwatch_metrics_and_logs():
 
 def test_aws_health_api_endpoint():
     """Verify GET /automation/aws-health endpoint returns 200 OK and latency details."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
     response = client.get("/automation/aws-health")
     assert response.status_code == 200
     data = response.json()
@@ -106,3 +107,4 @@ def test_aws_health_api_endpoint():
     assert "latency_ms" in data["services"]["lambda"]
     assert "latency_ms" in data["services"]["s3"]
     assert "latency_ms" in data["services"]["cloudwatch"]
+

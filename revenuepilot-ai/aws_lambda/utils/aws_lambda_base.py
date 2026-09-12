@@ -139,16 +139,27 @@ def get_database(db_name: Optional[str] = None) -> Any:
 
 # ─── ENVIRONMENT & CONFIGURATION ────────────────────────────────────────────
 
+# Recognised values of AWS_MODE that mean "use real AWS Cloud resources"
+_CLOUD_ALIASES: frozenset = frozenset({"cloud", "aws", "production", "prod"})
+
+
 class LambdaConfig:
     def __init__(self):
         raw_mode: str = os.environ.get("AWS_MODE", "local").strip().lower()
         key_id: str = os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
         secret: str = os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
 
-        # Enable AWS Cloud mode if valid credentials are set
-        _has_creds = bool(key_id and secret and not key_id.startswith("your-") and not key_id.startswith("sk-"))
+        # Cloud mode requires BOTH valid credentials AND AWS_MODE set to a cloud alias
+        _has_creds: bool = bool(
+            key_id
+            and secret
+            and not key_id.startswith("your-")
+            and not key_id.startswith("sk-")
+        )
+        _is_cloud_mode: bool = _has_creds and (raw_mode in _CLOUD_ALIASES)
+
         self.aws_mode: str = raw_mode
-        self.is_local_mode: bool = not _has_creds if _has_creds else (raw_mode not in _cloud_aliases)
+        self.is_local_mode: bool = not _is_cloud_mode
 
         self.aws_region: str = os.environ.get("AWS_REGION", "ap-south-1").strip()
         self.event_bus_name: str = os.environ.get("EVENTBRIDGE_BUS_NAME", "revenuepilot-event-bus").strip()
@@ -163,6 +174,7 @@ class LambdaConfig:
         self.low_stock_threshold: int = int(os.environ.get("LOW_STOCK_THRESHOLD", "5"))
 
 
+# Singleton config — safe at import time (reads env vars, no network calls)
 config = LambdaConfig()
 
 
