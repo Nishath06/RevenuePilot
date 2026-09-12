@@ -17,53 +17,64 @@ env:
 
 jobs:
 
-  #############################################################
+  #####################################################################
   # JOB 1 — Backend Tests + Frontend Builds
-  #############################################################
+  #####################################################################
 
   test:
     name: Backend Tests & Frontend Build
     runs-on: ubuntu-latest
-
-    # No redis service — Redis is not used in this project.
-    # MongoDB Atlas is used via the MONGODB_URL secret; no local mongo needed.
+    environment: DevOps
 
     env:
-      # ── App ──────────────────────────────────────────────────
       ENVIRONMENT: DevOps
       DEBUG: "false"
 
-      # ── MongoDB Atlas ─────────────────────────────────────────
-      MONGODB_URL: ${{ secrets.MONGODB_URL }}
-      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      # MongoDB
+      MONGODB_URL: ${{ vars.MONGODB_URL }}
+      DATABASE_NAME: ${{ vars.DATABASE_NAME }}
 
-      # ── JWT / Auth ────────────────────────────────────────────
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      JWT_ALGORITHM: HS256
-
-      # ── LLM Providers ────────────────────────────────────────
+      # LLM Providers
       LLM_PROVIDER: gemini
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_API_KEY: ${{ vars.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ vars.GEMINI_API_KEY }}
+      GROK_API_KEY: ${{ vars.GROK_API_KEY }}
 
-      # ── AWS ───────────────────────────────────────────────────
-      AWS_MODE: local                            # unit tests never touch real AWS
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      # AWS
+      AWS_MODE: local
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ vars.AWS_SECRET_ACCESS_KEY }}
 
-      # ── Razorpay ──────────────────────────────────────────────
-      RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
-      RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
-      RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+      # Razorpay
+      RAZORPAY_KEY_ID: ${{ vars.RAZORPAY_KEY_ID }}
+      RAZORPAY_KEY_SECRET: ${{ vars.RAZORPAY_KEY_SECRET }}
+
+      # Docker Hub
+      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ vars.DOCKER_PASSWORD }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       ###########################################################
-      # RevenuePilot AI — Python Backend
+      # Verify Variables (Safe Debug)
+      ###########################################################
+
+      - name: Verify Environment Variables
+        run: |
+          echo "Environment: $ENVIRONMENT"
+
+          [ -n "$MONGODB_URL" ] && echo "✅ MONGODB_URL loaded" || echo "❌ MONGODB_URL missing"
+          [ -n "$DATABASE_NAME" ] && echo "✅ DATABASE_NAME loaded" || echo "❌ DATABASE_NAME missing"
+          [ -n "$OPENAI_API_KEY" ] && echo "✅ OPENAI_API_KEY loaded" || echo "❌ OPENAI_API_KEY missing"
+          [ -n "$AWS_ACCESS_KEY_ID" ] && echo "✅ AWS_ACCESS_KEY_ID loaded" || echo "❌ AWS_ACCESS_KEY_ID missing"
+          [ -n "$RAZORPAY_KEY_ID" ] && echo "✅ RAZORPAY_KEY_ID loaded" || echo "❌ RAZORPAY_KEY_ID missing"
+          [ -n "$DOCKER_USERNAME" ] && echo "✅ DOCKER_USERNAME loaded" || echo "❌ DOCKER_USERNAME missing"
+
+      ###########################################################
+      # RevenuePilot AI Backend
       ###########################################################
 
       - name: Setup Python
@@ -88,11 +99,9 @@ jobs:
         working-directory: revenuepilot-ai
         run: |
           pytest -m integration --tb=short -q
-        # Integration tests need real secrets — skip gracefully if not available
-        continue-on-error: false
 
       ###########################################################
-      # RevenuePilot Store — Python Backend
+      # Store Backend
       ###########################################################
 
       - name: Install Store Backend Dependencies
@@ -101,21 +110,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Store Backend Tests (unit only)
+      - name: Run Store Backend Tests
         working-directory: revenuepilot-store/backend
         run: |
-          pytest -m unit --tb=short -q ../tests
+          pytest ../tests -m unit --tb=short -q
 
       ###########################################################
-      # Merchant Frontend (React + Vite)
+      # Merchant Frontend
       ###########################################################
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: revenuepilot-merchant/frontend/package-lock.json
+          cache-dependency-path: |
+            revenuepilot-merchant/frontend/package-lock.json
+            revenuepilot-store/frontend/package-lock.json
 
       - name: Install Merchant Frontend Dependencies
         working-directory: revenuepilot-merchant/frontend
@@ -126,28 +137,29 @@ jobs:
         run: npm run build
 
       ###########################################################
-      # Store Frontend (React + Vite)
+      # Store Frontend
       ###########################################################
 
       - name: Install Store Frontend Dependencies
         working-directory: revenuepilot-store/frontend
         run: npm ci
-        # Uses its own lockfile — Node cache set to merchant lockfile above
-        # is for the install step caching, npm ci here reads its own package-lock
 
       - name: Build Store Frontend
         working-directory: revenuepilot-store/frontend
         run: npm run build
 
-  #############################################################
+  #####################################################################
   # JOB 2 — Build Docker Images
-  # Runs in parallel matrix after tests pass
-  #############################################################
+  #####################################################################
 
   docker-build:
     name: Build Docker Images
     needs: test
     runs-on: ubuntu-latest
+    environment: DevOps
+
+    env:
+      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
 
     strategy:
       fail-fast: false
@@ -166,23 +178,22 @@ jobs:
             context: ./revenuepilot-store/frontend
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker Image — ${{ matrix.image }}
+      - name: Build Docker Image
         run: |
           docker build \
-            -t ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
-            -t ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:latest \
+            -t ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }} \
+            -t ${DOCKER_USERNAME}/${{ matrix.image }}:latest \
             ${{ matrix.context }}
 
-      - name: Save Docker Image Artifact
+      - name: Save Docker Image
         run: |
           docker save \
-            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
+            ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }} \
             -o ${{ matrix.image }}.tar
 
       - name: Upload Docker Image Artifact
@@ -192,14 +203,18 @@ jobs:
           path: ${{ matrix.image }}.tar
           retention-days: 1
 
-  #############################################################
+  #####################################################################
   # JOB 3 — Trivy Security Scan
-  #############################################################
+  #####################################################################
 
   trivy-scan:
-    name: Security Scan (Trivy)
+    name: Trivy Security Scan
     needs: docker-build
     runs-on: ubuntu-latest
+    environment: DevOps
+
+    env:
+      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
 
     strategy:
       fail-fast: false
@@ -211,7 +226,7 @@ jobs:
           - revenuepilot-store-frontend
 
     steps:
-      - name: Download Docker Image — ${{ matrix.image }}
+      - name: Download Docker Image
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.image }}
@@ -219,25 +234,30 @@ jobs:
       - name: Load Docker Image
         run: docker load -i ${{ matrix.image }}.tar
 
-      - name: Run Trivy Scan — ${{ matrix.image }}
+      - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
+          image-ref: ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
           format: table
           severity: MEDIUM,HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 1
 
-  #############################################################
-  # JOB 4 — Push Images to Docker Hub
-  # Only runs on push to main after Trivy passes
-  #############################################################
+  #####################################################################
+  # JOB 4 — Push Docker Images
+  #####################################################################
 
   docker-push:
-    name: Push Images to Docker Hub
+    name: Push Docker Images to Docker Hub
     needs: trivy-scan
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: DevOps
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    env:
+      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ vars.DOCKER_PASSWORD }}
 
     strategy:
       fail-fast: false
@@ -249,7 +269,7 @@ jobs:
           - revenuepilot-store-frontend
 
     steps:
-      - name: Download Docker Image — ${{ matrix.image }}
+      - name: Download Docker Image
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.image }}
@@ -260,11 +280,13 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
 
       - name: Push SHA Tag
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
+        run: |
+          docker push ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }}
 
       - name: Push Latest Tag
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:latest
+        run: |
+          docker push ${DOCKER_USERNAME}/${{ matrix.image }}:latest

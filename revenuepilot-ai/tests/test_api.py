@@ -8,29 +8,8 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-import os
-import socket
-from urllib.parse import urlparse
-
-def _has_mongodb() -> bool:
-    mongo_url = (os.environ.get("MONGODB_URL") or "").strip()
-    if not mongo_url or mongo_url == "mongodb://localhost:27017":
-        try:
-            with socket.create_connection(("localhost", 27017), timeout=0.5):
-                return True
-        except Exception:
-            return False
-    # If a custom MONGODB_URL is provided (e.g. MongoDB Atlas / cloud URI), assume configured
-    return True
-
-# Integration tests: API logic and analytics functions requiring live MongoDB
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skipif(
-        not _has_mongodb(),
-        reason="Requires active MongoDB connection (MONGODB_URL or local mongod on 27017)"
-    )
-]
+# Unit tests: API logic and analytics functions (use mocked DB where possible)
+pytestmark = [pytest.mark.unit]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

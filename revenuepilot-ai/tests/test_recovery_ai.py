@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Per user's CI categorisation: recovery AI tests are integration tests
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.integration]
 
 from app.services.recovery_scoring import (
     CustomerFeatures,
