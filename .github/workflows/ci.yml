@@ -1,6 +1,6 @@
 name: RevenuePilot CI/CD Pipeline
 
-on:
+"on":
   pull_request:
     branches:
       - main
