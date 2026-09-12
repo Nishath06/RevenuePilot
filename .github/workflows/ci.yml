@@ -389,6 +389,12 @@ jobs:
       - name: Load Docker Image
         run: docker load -i ${{ matrix.image }}.tar
 
+      - name: Restore latest tag
+        run: |
+          docker tag \
+            ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }} \
+            ${DOCKER_USERNAME}/${{ matrix.image }}:latest
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
