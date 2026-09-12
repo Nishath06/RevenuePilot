@@ -8,8 +8,8 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-# Unit tests: API logic and analytics functions (use mocked DB where possible)
-pytestmark = [pytest.mark.unit]
+# Integration tests: API logic and analytics functions (use live MongoDB)
+pytestmark = [pytest.mark.integration]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -175,17 +175,32 @@ def redis_url():
     return os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Fixtures — FastAPI TestClient
-# ─────────────────────────────────────────────────────────────────────────────
+@pytest.fixture()
+def auth_headers():
+    """Returns valid Bearer JWT Authorization headers for test principal."""
+    import jwt
+    from datetime import datetime, timedelta, timezone
+    from app.core.config import settings
+
+    payload = {
+        "user_id": "test_user_123",
+        "merchant_id": "merch_default",
+        "role": "merchant",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1)
+    }
+    secret = getattr(settings, "JWT_SECRET", None) or "supersecretjwtkey_revenuepilot_2026_hackathon"
+    algorithm = getattr(settings, "JWT_ALGORITHM", "HS256")
+    token = jwt.encode(payload, secret, algorithm=algorithm)
+    return {"Authorization": f"Bearer {token}"}
+
 
 @pytest.fixture()
-def test_client():
-    """Shared FastAPI TestClient fixture (lazy import)."""
+def test_client(auth_headers):
+    """Shared FastAPI TestClient fixture with Bearer auth headers."""
     from fastapi.testclient import TestClient
     from app.main import create_app
     application = create_app()
-    with TestClient(application) as client:
+    with TestClient(application, headers=auth_headers) as client:
         yield client
 
 
