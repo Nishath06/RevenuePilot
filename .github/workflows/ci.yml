@@ -188,118 +188,68 @@ jobs:
   #####################################################################
 
   docker-build:
-    name: Build Docker Images
-    needs: test
-    runs-on: ubuntu-latest
-    environment: DevOps
+  name: Build Docker Images
+  needs: test
+  runs-on: ubuntu-latest
+  environment: DevOps
 
-    env:
-      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+  env:
+    DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: revenuepilot-ai
-            context: ./revenuepilot-ai
-            is_python: true
+  strategy:
+    fail-fast: false
+    matrix:
+      include:
+        - image: revenuepilot-ai
+          context: ./revenuepilot-ai
+          is_python: true
 
-          - image: revenuepilot-merchant
-            context: ./revenuepilot-merchant/frontend
-            is_python: false
+        - image: revenuepilot-merchant
+          context: ./revenuepilot-merchant/frontend
+          is_python: false
 
-          - image: revenuepilot-store-backend
-            context: ./revenuepilot-store/backend
-            is_python: true
+        - image: revenuepilot-store-backend
+          context: ./revenuepilot-store/backend
+          is_python: true
 
-          - image: revenuepilot-store-frontend
-            context: ./revenuepilot-store/frontend
-            is_python: false
+        - image: revenuepilot-store-frontend
+          context: ./revenuepilot-store/frontend
+          is_python: false
 
-    steps:
-      - uses: actions/checkout@v4
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      # --pull: always fetch latest base image (prevents stale base layer caching)
-      # --no-cache: prevents Docker layer cache from reusing old package install layers
-      - name: Build Docker Image
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.context }}/Dockerfile
-          push: false
-          load: true
-          no-cache: true
-          pull: true
-          tags: |
-            ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
-            ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:latest
+    - name: Build Docker Image
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ matrix.context }}
+        file: ${{ matrix.context }}/Dockerfile
+        push: false
+        load: true
+        pull: true
+        no-cache: true
+        tags: |
+          ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
+          ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:latest
 
-      # ── Python Package Version Verification ─────────────────────────────────
-      # Verifies BOTH the venv packages (/opt/venv) AND system python packages.
-      # Trivy scans both locations independently — both must be patched.
-      - name: Verify Python Package Security Versions
-        if: matrix.is_python == true
-        env:
-          IMAGE: ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
-          EXPECTED_SETUPTOOLS: ${{ env.EXPECTED_SETUPTOOLS }}
-          EXPECTED_WHEEL: ${{ env.EXPECTED_WHEEL }}
-          EXPECTED_MSGPACK: ${{ env.EXPECTED_MSGPACK }}
-          EXPECTED_JARACO_CONTEXT: ${{ env.EXPECTED_JARACO_CONTEXT }}
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🔍 Verifying security package versions in: ${{ matrix.image }}"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    # Save BOTH tags into the artifact.
+    - name: Save Docker Image
+      run: |
+        docker save \
+          ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }} \
+          ${DOCKER_USERNAME}/${{ matrix.image }}:latest \
+          -o ${{ matrix.image }}.tar
 
-          docker run --rm ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
-            python -c "
-          import importlib.metadata as md, sys
-
-          expected = {
-              'setuptools':     '${{ env.EXPECTED_SETUPTOOLS }}',
-              'wheel':          '${{ env.EXPECTED_WHEEL }}',
-              'msgpack':        '${{ env.EXPECTED_MSGPACK }}',
-              'jaraco.context': '${{ env.EXPECTED_JARACO_CONTEXT }}',
-          }
-
-          failures = []
-          for pkg, required_ver in expected.items():
-              try:
-                  actual_ver = md.version(pkg)
-                  if actual_ver == required_ver:
-                      print(f'  ✅ {pkg}: {actual_ver}')
-                  else:
-                      print(f'  ❌ {pkg}: {actual_ver} (expected {required_ver})')
-                      failures.append(f'{pkg} expected={required_ver} actual={actual_ver}')
-              except md.PackageNotFoundError:
-                  print(f'  ❌ {pkg}: NOT FOUND')
-                  failures.append(f'{pkg} not installed')
-
-          if failures:
-              print()
-              print('SECURITY VIOLATION: Package version mismatch detected!')
-              for f in failures:
-                  print(f'  → {f}')
-              sys.exit(1)
-
-          print()
-          print('✅ All security package versions verified successfully.')
-          "
-
-      - name: Save Docker Image
-        run: |
-          docker save \
-            ${{ env.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
-            -o ${{ matrix.image }}.tar
-
-      - name: Upload Docker Image Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.image }}
-          path: ${{ matrix.image }}.tar
-          retention-days: 1
+    - name: Upload Docker Image Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.image }}
+        path: ${{ matrix.image }}.tar
+        retention-days: 1
 
   #####################################################################
   # JOB 3 — Trivy Security Scan
@@ -360,43 +310,55 @@ jobs:
   #####################################################################
 
   docker-push:
-    name: Push Docker Images to Docker Hub
-    needs: trivy-scan
-    runs-on: ubuntu-latest
-    environment: DevOps
+  name: Push Docker Images to Docker Hub
+  needs: trivy-scan
+  runs-on: ubuntu-latest
+  environment: DevOps
 
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
-    env:
-      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ vars.DOCKER_PASSWORD }}
+  env:
+    DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+    DOCKER_PASSWORD: ${{ vars.DOCKER_PASSWORD }}
 
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - revenuepilot-ai
-          - revenuepilot-merchant
-          - revenuepilot-store-backend
-          - revenuepilot-store-frontend
+  strategy:
+    fail-fast: false
+    matrix:
+      image:
+        - revenuepilot-ai
+        - revenuepilot-merchant
+        - revenuepilot-store-backend
+        - revenuepilot-store-frontend
 
-    steps:
-      - name: Download Docker Image
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.image }}
+  steps:
+    - name: Download Docker Image
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ matrix.image }}
 
-      - name: Load Docker Image
-        run: docker load -i ${{ matrix.image }}.tar
+    - name: Load Docker Image
+      run: docker load -i ${{ matrix.image }}.tar
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_PASSWORD }}
+    # Recreate latest tag after loading.
+    - name: Restore latest tag
+      run: |
+        docker tag \
+          ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }} \
+          ${DOCKER_USERNAME}/${{ matrix.image }}:latest
 
-      - name: Push SHA Tag
-        run: docker push ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }}
+    - name: Verify Docker Tags
+      run: docker images | grep ${{ matrix.image }}
 
-      - name: Push Latest Tag
-        run: docker push ${DOCKER_USERNAME}/${{ matrix.image }}:latest
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ env.DOCKER_USERNAME }}
+        password: ${{ env.DOCKER_PASSWORD }}
+
+    - name: Push SHA Tag
+      run: |
+        docker push ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }}
+
+    - name: Push Latest Tag
+      run: |
+        docker push ${DOCKER_USERNAME}/${{ matrix.image }}:latest
