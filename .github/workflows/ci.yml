@@ -30,7 +30,7 @@ jobs:
 
     env:
       # ── App ──────────────────────────────────────────────────
-      ENVIRONMENT: test
+      ENVIRONMENT: DevOps
       DEBUG: "false"
 
       # ── MongoDB Atlas ─────────────────────────────────────────

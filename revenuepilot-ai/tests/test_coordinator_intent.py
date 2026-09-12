@@ -5,10 +5,7 @@ Tests intent classification, agent selection, confidence rules, and mixed intent
 import pytest
 from app.agents.coordinator import classify_intent, CoordinatorAgent
 
-# Module-level default: pure intent-classification tests are fast unit tests
-pytestmark = [pytest.mark.unit]
-
-
+@pytest.mark.unit
 def test_inventory_intent_classification():
     inventory_queries = [
         "Which products have zero sales this month?",
@@ -37,6 +34,7 @@ def test_inventory_intent_classification():
         assert res["selected_agent"] != "Revenue Agent", f"Inventory query '{q}' incorrectly executed Revenue Agent!"
 
 
+@pytest.mark.unit
 def test_payment_intent_classification():
     payment_queries = [
         "Failed payments today.",
@@ -56,6 +54,7 @@ def test_payment_intent_classification():
         assert res["confidence"] >= 0.90
 
 
+@pytest.mark.unit
 def test_revenue_intent_classification():
     revenue_queries = [
         "Today's revenue.",
@@ -75,6 +74,7 @@ def test_revenue_intent_classification():
         assert res["confidence"] >= 0.90
 
 
+@pytest.mark.unit
 def test_recovery_intent_classification():
     recovery_queries = [
         "Abandoned carts.",
@@ -93,6 +93,7 @@ def test_recovery_intent_classification():
         assert res["confidence"] >= 0.90
 
 
+@pytest.mark.unit
 def test_customer_intent_classification():
     customer_queries = [
         "Top customers.",
@@ -110,6 +111,7 @@ def test_customer_intent_classification():
         assert res["confidence"] >= 0.90
 
 
+@pytest.mark.unit
 def test_mixed_intent_detection():
     mixed_query = "Why is today's revenue low and which failed payments affected it?"
     res = classify_intent(mixed_query)
