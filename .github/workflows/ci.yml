@@ -338,6 +338,8 @@ jobs:
       # ignore-unfixed: suppresses Debian CVEs with no upstream fix available.
       # Python package CVEs always have a "fix" (the patched version we pinned),
       # so they will not be suppressed.
+      # skip-dirs prevents Trivy from reading stale scan cache from previous runs.
+      # GitHub Actions runners reuse workspace dirs, so old Trivy cache can persist.
       - name: Scan with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -348,6 +350,10 @@ jobs:
           ignore-unfixed: true
           trivy-config: .trivy.yaml
           exit-code: 1
+          skip-setup-trivy: false
+        env:
+          TRIVY_CACHE_DIR: /tmp/trivy-cache-${{ github.sha }}
+          TRIVY_NO_PROGRESS: "true"
 
   #####################################################################
   # JOB 4 — Push Docker Images

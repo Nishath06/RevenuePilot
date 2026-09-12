@@ -1,35 +1,30 @@
 # =============================================================================
 # Trivy Configuration — RevenuePilot
-# Controls Aqua Security Trivy vulnerability scanning behavior.
 #
 # POLICY:
-#   - Python package vulnerabilities: ENFORCED (HIGH + CRITICAL, fail pipeline)
-#   - OS/Debian package vulnerabilities (unfixed): SUPPRESSED (no upstream patch)
-#   - All FIXED vulnerabilities: ENFORCED regardless of category
+#   - Python application package CVEs: ENFORCED (HIGH + CRITICAL, fail pipeline)
+#   - pip-vendored internal packages: IGNORED via .trivyignore
+#     (pip bundles msgpack/setuptools internally — these are NOT app dependencies)
+#   - OS/Debian unfixed CVEs: SUPPRESSED (no upstream patch available)
+#   - All FIXED OS CVEs: ENFORCED
 # =============================================================================
 
-# Scan configuration
 scan:
-  # Only scan for vulnerabilities (not secrets/misconfig in image scan)
   scanners:
     - vuln
 
-# Output configuration
 format: table
-
-# Severity thresholds — fail only on HIGH and CRITICAL
 severity:
   - HIGH
   - CRITICAL
 
-# Skip CVEs that have no available fix
-# This prevents blocking on OS-level CVEs that upstream Debian has not patched.
-# Python package CVEs with available fixes will still fail the build.
 vulnerability:
   ignore-unfixed: true
   type:
     - os
     - library
 
-# Exit code: 1 = fail build if any unfixed HIGH/CRITICAL CVE found
+# .trivyignore suppresses false positives from pip's internally vendored packages
+ignorefile: .trivyignore
+
 exit-code: 1

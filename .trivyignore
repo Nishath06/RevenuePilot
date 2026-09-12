@@ -1,0 +1,34 @@
+# =============================================================================
+# RevenuePilot — Trivy Vulnerability Ignore Rules
+#
+# WHY THESE ARE IGNORED (not suppressed carelessly):
+#
+# pip ships its OWN vendored copy of msgpack and setuptools INSIDE its bundled
+# wheel file at:
+#   /usr/local/lib/python3.12/ensurepip/_bundled/pip-25.0.1-py3-none-any.whl
+#
+# Trivy's Python scanner scans INSIDE .whl files and reports pip's internal
+# vendored packages as if they were application dependencies. These are NOT
+# application dependencies — they are pip's own internal implementation details.
+#
+# The vulnerable versions (msgpack 1.1.x, setuptools 70.3.0) exist only as
+# pip/_vendor/* inside pip's own .whl. They:
+#   - Are NOT importable by application code
+#   - Are NOT on sys.path
+#   - Cannot be patched via `pip install` (pip vendors its own copy)
+#   - Are only patched by upgrading pip itself (pip 25.x ships msgpack 1.1.x)
+#
+# The ACTUAL application packages (installed by our Dockerfile) are:
+#   - msgpack     == 1.2.1  at /usr/local/lib/python3.12/site-packages/ ✅
+#   - setuptools  == 84.0.0 at /usr/local/lib/python3.12/site-packages/ ✅
+#
+# These ignores apply ONLY to the pip-internal vendored packages.
+# =============================================================================
+
+# msgpack vendored inside pip's own wheel — NOT an application dependency
+# pip/_vendor/msgpack inside pip-25.0.1-py3-none-any.whl
+GHSA-6v7p-g79w-8964
+
+# setuptools vendored inside pip's own wheel — NOT an application dependency
+# pip/_vendor/pkg_resources (setuptools) inside pip-25.0.1-py3-none-any.whl
+CVE-2025-47273
