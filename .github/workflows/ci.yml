@@ -396,9 +396,7 @@ jobs:
           password: ${{ env.DOCKER_PASSWORD }}
 
       - name: Push SHA Tag
-        run: |
-          docker push ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }}
+        run: docker push ${DOCKER_USERNAME}/${{ matrix.image }}:${{ github.sha }}
 
       - name: Push Latest Tag
-        run: |
-          docker push ${DOCKER_USERNAME}/${{ matrix.image }}:latest
+        run: docker push ${DOCKER_USERNAME}/${{ matrix.image }}:latest
