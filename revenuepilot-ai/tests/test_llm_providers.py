@@ -5,10 +5,25 @@ Verifies provider abstraction layer, factory routing, health metadata, and fallb
 All LLM provider imports are lazy (inside test bodies) so `pytest -m unit` never
 initialises any LLM SDK during collection.
 """
+import os
 import pytest
 
-# Provider routing tests are pure unit tests (no real API calls made)
-pytestmark = [pytest.mark.unit]
+def _has_llm_keys() -> bool:
+    for k in ("OPENAI_API_KEY", "GEMINI_API_KEY", "GROK_API_KEY"):
+        val = os.environ.get(k, "").strip()
+        if val and not val.startswith("unit-test") and not val.startswith("sk-placeholder"):
+            return True
+    return False
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.llm,
+    pytest.mark.skipif(
+        not _has_llm_keys(),
+        reason="Requires valid LLM API key (OPENAI_API_KEY, GEMINI_API_KEY, or GROK_API_KEY)"
+    )
+]
+
 
 
 @pytest.mark.asyncio

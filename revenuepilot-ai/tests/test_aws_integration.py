@@ -5,10 +5,23 @@ Verifies EventBridge, SNS, S3, CloudWatch, AWS Client, and /automation/aws-healt
 All AWS service imports are lazy (inside test bodies) so `pytest -m unit` never
 touches boto3 or AWS modules during collection.
 """
+import os
 import pytest
 
-# All tests here call AWS SDK services (with graceful local fallback)
-pytestmark = [pytest.mark.integration, pytest.mark.aws]
+def _has_aws_creds() -> bool:
+    key_id = os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
+    secret = os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
+    return bool(key_id and secret and not key_id.startswith("your-") and not key_id.startswith("sk-") and key_id != "")
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.aws,
+    pytest.mark.skipif(
+        not _has_aws_creds(),
+        reason="Requires valid AWS credentials (AWS_ACCESS_KEY_ID & AWS_SECRET_ACCESS_KEY)"
+    )
+]
+
 
 
 def test_aws_client_verification():

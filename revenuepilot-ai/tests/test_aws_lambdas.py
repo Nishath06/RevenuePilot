@@ -17,8 +17,21 @@ from datetime import datetime, timezone
 # Ensure root workspace directory is in python path so aws_lambda package is found
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Lambda handler tests run locally with graceful fallback (no live AWS required for most)
-pytestmark = [pytest.mark.unit, pytest.mark.aws]
+# Lambda handler tests run in integration mode with AWS credentials
+def _has_aws_creds() -> bool:
+    key_id = os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
+    secret = os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
+    return bool(key_id and secret and not key_id.startswith("your-") and not key_id.startswith("sk-") and key_id != "")
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.aws,
+    pytest.mark.skipif(
+        not _has_aws_creds(),
+        reason="Requires valid AWS credentials (AWS_ACCESS_KEY_ID & AWS_SECRET_ACCESS_KEY)"
+    )
+]
+
 
 
 class DummyContext:

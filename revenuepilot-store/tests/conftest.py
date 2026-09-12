@@ -17,3 +17,12 @@ def mock_user_data():
         "phone": "9876543210",
         "password": "Password123!"
     }
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "unit: Fast unit tests")
+    config.addinivalue_line("markers", "integration: Requires external services")
+    config.addinivalue_line("markers", "aws: Requires AWS credentials")
+    config.addinivalue_line("markers", "llm: Requires LLM keys")
+    config.addinivalue_line("markers", "razorpay: Requires Razorpay credentials")
+

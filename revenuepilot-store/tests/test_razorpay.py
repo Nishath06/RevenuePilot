@@ -1,10 +1,24 @@
+import os
 import pytest
 import hmac
 import hashlib
 from app.services.razorpay import razorpay_service
 from app.core.config import settings
 
-pytestmark = [pytest.mark.integration, pytest.mark.razorpay]
+def _has_razorpay_keys() -> bool:
+    key_id = os.environ.get("RAZORPAY_KEY_ID", "").strip()
+    secret = os.environ.get("RAZORPAY_KEY_SECRET", "").strip()
+    return bool(key_id and secret and not key_id.startswith("rzp_test_placeholder") and not secret.startswith("placeholder"))
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.razorpay,
+    pytest.mark.skipif(
+        not _has_razorpay_keys(),
+        reason="Requires valid Razorpay credentials (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET)"
+    )
+]
+
 
 def test_razorpay_order_creation():
     amount = 4999.0

@@ -3,8 +3,8 @@ RevenuePilot AI — Pytest Configuration & Shared Fixtures
 =========================================================
 * Loads .env before any test runs.
 * Sets safe default environment variables so unit tests never need real secrets.
-* Provides fixtures for mocked AWS clients, mocked LLM providers, and
-  async MongoDB/event-loop setup.
+* Provides fixtures for mocked AWS clients, mocked LLM providers, MongoDB, Redis,
+  and FastAPI TestClient setup.
 * Integration tests that need real credentials rely on GitHub Actions secrets
   injected as environment variables — they override the defaults set here.
 """
@@ -48,6 +48,7 @@ _UNIT_DEFAULTS: dict[str, str] = {
     "OPENAI_API_KEY": "unit-test-placeholder",
     "MONGODB_URL": os.environ.get("MONGODB_URL", "mongodb://localhost:27017"),
     "DATABASE_NAME": os.environ.get("DATABASE_NAME", "revenuepilot_test"),
+    "REDIS_URL": os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
     "RAZORPAY_KEY_ID": os.environ.get("RAZORPAY_KEY_ID", "rzp_test_placeholder"),
     "RAZORPAY_KEY_SECRET": os.environ.get("RAZORPAY_KEY_SECRET", "placeholder_secret"),
     "RAZORPAY_WEBHOOK_SECRET": os.environ.get("RAZORPAY_WEBHOOK_SECRET", "placeholder_webhook"),
@@ -112,7 +113,7 @@ def mock_llm_provider():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Fixtures — MongoDB (async)
+# Fixtures — MongoDB & Redis
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture()
@@ -141,9 +142,45 @@ def mock_mongodb():
     return mock_db
 
 
+@pytest.fixture()
+def mongodb_url():
+    """Returns the configured MONGODB_URL string."""
+    return os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
+
+
+@pytest.fixture()
+def mock_redis():
+    """Returns a mocked Redis client instance for unit testing."""
+    redis_mock = MagicMock()
+    redis_mock.get = MagicMock(return_value=None)
+    redis_mock.set = MagicMock(return_value=True)
+    redis_mock.delete = MagicMock(return_value=1)
+    redis_mock.ping = MagicMock(return_value=True)
+    return redis_mock
+
+
+@pytest.fixture()
+def redis_url():
+    """Returns the configured REDIS_URL string."""
+    return os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fixtures — FastAPI TestClient
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def test_client():
+    """Shared FastAPI TestClient fixture (lazy import)."""
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    application = create_app()
+    with TestClient(application) as client:
+        yield client
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Markers — Register custom markers to suppress PytestUnknownMarkWarning
-# (also declared in pytest.ini — belt-and-suspenders approach)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def pytest_configure(config):
@@ -152,3 +189,4 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "aws: Requires AWS credentials")
     config.addinivalue_line("markers", "llm: Requires OpenAI / Gemini / Grok API keys")
     config.addinivalue_line("markers", "razorpay: Requires Razorpay credentials")
+
