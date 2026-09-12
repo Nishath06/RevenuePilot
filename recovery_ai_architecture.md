@@ -25,7 +25,7 @@ RecoveryIntelligenceAgent.run()
 RecoveryCandidateRepository.upsert_candidates()
         ↓
 MongoDB: recovery_candidates (status=APPROVED)
-        ↓
+        ↓   
 POST /automation/recovery/run-approved
         ↓
 RecoveryLambda (UNCHANGED — execution only)
