@@ -23,11 +23,18 @@ async def connect_to_mongodb(max_retries: int = 5, delay: float = 2.0) -> None:
     """Establish async MongoDB connection with retry logic."""
     global _client, _database
 
+    mongo_url = (settings.MONGODB_URL or os.environ.get("MONGODB_URL") or "mongodb://localhost:27017").strip()
+    if not mongo_url:
+        mongo_url = "mongodb://localhost:27017"
+    db_name = (settings.DATABASE_NAME or os.environ.get("DATABASE_NAME") or "revenuepilot").strip()
+    if not db_name:
+        db_name = "revenuepilot"
+
     for attempt in range(1, max_retries + 1):
         try:
-            logger.info("Connecting to MongoDB", attempt=attempt, url=settings.MONGODB_URL)
+            logger.info("Connecting to MongoDB", attempt=attempt, url=mongo_url)
             _client = motor.motor_asyncio.AsyncIOMotorClient(
-                settings.MONGODB_URL,
+                mongo_url,
                 maxPoolSize=20,
                 minPoolSize=5,
                 serverSelectionTimeoutMS=5000,
@@ -36,11 +43,11 @@ async def connect_to_mongodb(max_retries: int = 5, delay: float = 2.0) -> None:
             )
             # Force connection to verify
             await _client.admin.command("ping")
-            _database = _client[settings.DATABASE_NAME]
+            _database = _client[db_name]
             await _ensure_indexes()
             logger.info(
                 "MongoDB connected and indexes verified",
-                database=settings.DATABASE_NAME,
+                database=db_name,
                 attempt=attempt,
             )
             return
@@ -65,34 +72,42 @@ async def close_mongodb_connection() -> None:
 def get_database() -> motor.motor_asyncio.AsyncIOMotorDatabase:
     """Return the active database instance, recreating Motor client if running loop changed or client is uninitialized."""
     global _client, _database
+    mongo_url = (settings.MONGODB_URL or os.environ.get("MONGODB_URL") or "mongodb://localhost:27017").strip()
+    if not mongo_url:
+        mongo_url = "mongodb://localhost:27017"
+    db_name = (settings.DATABASE_NAME or os.environ.get("DATABASE_NAME") or "revenuepilot").strip()
+    if not db_name:
+        db_name = "revenuepilot"
+
     if _client is None or _database is None:
         _client = motor.motor_asyncio.AsyncIOMotorClient(
-            settings.MONGODB_URL,
+            mongo_url,
             maxPoolSize=20,
             minPoolSize=5,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
             socketTimeoutMS=30000,
         )
-        _database = _client[settings.DATABASE_NAME]
+        _database = _client[db_name]
 
     try:
         current_loop = asyncio.get_running_loop()
         client_loop = getattr(_client, "get_io_loop", lambda: None)() or getattr(_client, "io_loop", None)
         if client_loop and client_loop != current_loop and not current_loop.is_closed():
             _client = motor.motor_asyncio.AsyncIOMotorClient(
-                settings.MONGODB_URL,
+                mongo_url,
                 maxPoolSize=20,
                 minPoolSize=5,
                 serverSelectionTimeoutMS=5000,
                 connectTimeoutMS=5000,
                 socketTimeoutMS=30000,
             )
-            _database = _client[settings.DATABASE_NAME]
+            _database = _client[db_name]
     except Exception:
         pass
 
     return _database
+
 
 
 def get_collection(name: str) -> motor.motor_asyncio.AsyncIOMotorCollection:

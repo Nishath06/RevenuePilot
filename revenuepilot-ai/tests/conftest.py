@@ -32,7 +32,6 @@ if _env_file.exists():
         pass  # python-dotenv not installed — rely on real env vars
 
 
-# ── Safe unit-test defaults (only applied when the real secret is absent) ────
 _UNIT_DEFAULTS: dict[str, str] = {
     "ENVIRONMENT": "test",
     "DEBUG": "false",
@@ -46,20 +45,31 @@ _UNIT_DEFAULTS: dict[str, str] = {
     "GEMINI_API_KEY": "unit-test-placeholder",
     "GROK_API_KEY": "unit-test-placeholder",
     "OPENAI_API_KEY": "unit-test-placeholder",
-    "MONGODB_URL": os.environ.get("MONGODB_URL", "mongodb://localhost:27017"),
-    "DATABASE_NAME": os.environ.get("DATABASE_NAME", "revenuepilot_test"),
-    "REDIS_URL": os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
-    "RAZORPAY_KEY_ID": os.environ.get("RAZORPAY_KEY_ID", "rzp_test_placeholder"),
-    "RAZORPAY_KEY_SECRET": os.environ.get("RAZORPAY_KEY_SECRET", "placeholder_secret"),
-    "RAZORPAY_WEBHOOK_SECRET": os.environ.get("RAZORPAY_WEBHOOK_SECRET", "placeholder_webhook"),
-    "JWT_SECRET": os.environ.get("JWT_SECRET", "supersecretjwtkey_revenuepilot_2026_hackathon"),
+    "MONGODB_URL": os.environ.get("MONGODB_URL") or "mongodb://localhost:27017",
+    "DATABASE_NAME": os.environ.get("DATABASE_NAME") or "revenuepilot_test",
+    "REDIS_URL": os.environ.get("REDIS_URL") or "redis://localhost:6379/0",
+    "RAZORPAY_KEY_ID": os.environ.get("RAZORPAY_KEY_ID") or "rzp_test_placeholder",
+    "RAZORPAY_KEY_SECRET": os.environ.get("RAZORPAY_KEY_SECRET") or "placeholder_secret",
+    "RAZORPAY_WEBHOOK_SECRET": os.environ.get("RAZORPAY_WEBHOOK_SECRET") or "placeholder_webhook",
+    "JWT_SECRET": os.environ.get("JWT_SECRET") or "supersecretjwtkey_revenuepilot_2026_hackathon",
     "JWT_ALGORITHM": "HS256",
     "SES_FROM_EMAIL": "noreply@revenuepilot.ai",
 }
 
 for _key, _val in _UNIT_DEFAULTS.items():
-    if not os.environ.get(_key):
+    if not os.environ.get(_key, "").strip():
         os.environ[_key] = _val
+
+# Sync with app settings singleton
+try:
+    from app.core.config import settings
+    if not (settings.MONGODB_URL or "").strip():
+        settings.MONGODB_URL = os.environ["MONGODB_URL"]
+    if not (settings.DATABASE_NAME or "").strip():
+        settings.DATABASE_NAME = os.environ["DATABASE_NAME"]
+except Exception:
+    pass
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

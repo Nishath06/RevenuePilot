@@ -80,8 +80,9 @@ class Settings(BaseSettings):
     PORT: int = 8001
 
     # ── MongoDB ──────────────────────────────────────────────────────────────
-    MONGODB_URL: str = os.getenv("MONGODB_URL")
-    DATABASE_NAME: str = os.getenv("DATABASE_NAME")
+    MONGODB_URL: str = os.getenv("MONGODB_URL") or "mongodb://localhost:27017"
+    DATABASE_NAME: str = os.getenv("DATABASE_NAME") or "revenuepilot"
+
 
     # ── LLM / Gemini / Grok / OpenAI ──────────────────────────────────────────
     LLM_PROVIDER: str = "gemini"
