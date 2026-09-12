@@ -13,13 +13,8 @@ tests
 .git
 .gitignore
 *.md
-scripts
-aws_lambda
 server.log
 server.err
-*.txt
-!requirements.txt
 patch_*.py
 fix_*.py
 temp_*.py
-test_*.py

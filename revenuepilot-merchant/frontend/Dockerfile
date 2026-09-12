@@ -1,33 +1,38 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# RevenuePilot Merchant Frontend — Dockerfile
-# Node 20 Alpine build → Nginx Alpine serve, port 80 (host: 3001)
+# RevenuePilot Merchant Frontend — Production Dockerfile
+# Stage 1: Build React/Vite SPA with Node 22 Alpine
+# Stage 2: Serve compiled static assets with Nginx 1.29 Alpine
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Stage 1: Build
-FROM node:20-alpine AS build
+# ── Stage 1: Build ───────────────────────────────────────────────────────────
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
+# Copy package manifests for efficient layer caching
 COPY package*.json ./
 
+# Clean installation of dependencies
 RUN npm ci
 
+# Copy application source code & build production bundle
 COPY . .
-
 RUN npm run build
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Stage 2: Serve with Nginx
-# ─────────────────────────────────────────────────────────────────────────────
-FROM nginx:alpine
+# ── Stage 2: Serve with Nginx ────────────────────────────────────────────────
+FROM nginx:1.29-alpine AS runtime
 
-LABEL maintainer="RevenuePilot Team"
-LABEL description="RevenuePilot Merchant Dashboard Frontend"
+LABEL maintainer="RevenuePilot Team" \
+      version="1.0.0" \
+      description="RevenuePilot Merchant Dashboard Frontend"
 
-# Copy built assets
+# Upgrade Alpine OS packages to patch vulnerabilities (util-linux, libuuid, etc.)
+RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
+
+# Copy compiled static SPA assets from builder
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Nginx config — SPA routing + API proxies
+# Custom Nginx configuration with SPA routing and backend proxying
 COPY <<EOF /etc/nginx/conf.d/default.conf
 server {
     listen 80;
@@ -67,6 +72,7 @@ EOF
 
 EXPOSE 80
 
+# Healthcheck to verify Nginx status
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost/ || exit 1
 

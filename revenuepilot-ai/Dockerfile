@@ -1,44 +1,66 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# RevenuePilot AI — Dockerfile
-# Python 3.12 slim, non-root user, port 8001
+# RevenuePilot AI Microservice — Production Dockerfile
+# Stage 1: Build virtual environment & dependencies
+# Stage 2: Minimal hardened Python 3.12 slim-bookworm runtime
 # ─────────────────────────────────────────────────────────────────────────────
-FROM python:3.12-slim
 
-# Metadata
-LABEL maintainer="RevenuePilot AI Team"
-LABEL version="1.0.0"
-LABEL description="AI Revenue Intelligence Microservice"
+# ── Stage 1: Builder ─────────────────────────────────────────────────────────
+FROM python:3.12-slim-bookworm AS builder
 
-# Environment
-ENV PYTHONDONTWRITEBYTECODE=1 \
+WORKDIR /app
+
+# Upgrade OS packages & install build essentials
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies with pip caching disabled
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+FROM python:3.12-slim-bookworm AS runtime
+
+LABEL maintainer="RevenuePilot AI Team" \
+      version="1.0.0" \
+      description="RevenuePilot AI Microservice"
+
+# Upgrade runtime OS packages to eliminate Trivy vulnerabilities
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy virtualenv from builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8001
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Create non-root system user and group
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --ingroup appgroup appuser
 
-# Install Python dependencies (cached layer)
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# Copy application source code
+COPY --chown=appuser:appgroup . .
 
-# Copy application code
-COPY . .
-
-# Non-root user for security
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+# Switch to unprivileged user
 USER appuser
 
-# Expose port
 EXPOSE 8001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+# Container healthcheck using FastAPI /health route
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
-# Start server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
+# Start Uvicorn ASGI server
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

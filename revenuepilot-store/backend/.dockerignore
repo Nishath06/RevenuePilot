@@ -13,4 +13,5 @@ tests
 .git
 .gitignore
 *.md
-scripts
+server.log
+server.err
