@@ -1,30 +1,262 @@
-name: CI
+name: RevenuePilot CI/CD Pipeline
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
 
 jobs:
-  test:  
+
+  #############################################################
+  # JOB 1 — Run Backend Tests + Frontend Builds
+  #############################################################
+
+  test:
+    name: Backend Tests & Frontend Build
     runs-on: ubuntu-latest
 
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      # AI Providers
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+
+      # AWS
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      # Razorpay
+      RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+      RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+
+      # Local services
+      MONGO_URI: mongodb://localhost:27017/revenuepilot
+      REDIS_URL: redis://localhost:6379
+
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        
-      - name: Set up python
+
+      ###########################################################
+      # Python Backend
+      ###########################################################
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      
-      - name: Install dependencies
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install RevenuePilot AI Dependencies
+        working-directory: revenuepilot-ai
         run: |
-            pip install -r requirements.txt
-        
-      - name: Run tests 
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Unit Tests
+        working-directory: revenuepilot-ai
         run: |
-            pytest
-      
-    
+          pytest -m unit
+
+      - name: Run Integration Tests
+        working-directory: revenuepilot-ai
+        run: |
+          pytest -m integration
+
+      ###########################################################
+      # Merchant Frontend
+      ###########################################################
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: revenuepilot-merchant/frontend/package-lock.json
+
+      - name: Install Merchant Frontend Dependencies
+        working-directory: revenuepilot-merchant/frontend
+        run: npm ci
+
+      - name: Build Merchant Frontend
+        working-directory: revenuepilot-merchant/frontend
+        run: npm run build
+
+      ###########################################################
+      # Store Frontend
+      ###########################################################
+
+      - name: Install Store Frontend Dependencies
+        working-directory: revenuepilot-store/frontend
+        run: npm ci
+
+      - name: Build Store Frontend
+        working-directory: revenuepilot-store/frontend
+        run: npm run build
+
+      ###########################################################
+      # Store Backend (Optional Tests)
+      ###########################################################
+
+      - name: Install Store Backend Dependencies
+        working-directory: revenuepilot-store/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Store Backend Tests
+        working-directory: revenuepilot-store
+        run: |
+          pytest tests
+
+  #############################################################
+  # JOB 2 — Build Docker Images
+  #############################################################
+
+  docker-build:
+    name: Build Docker Images
+    needs: test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - image: revenuepilot-ai
+            context: ./revenuepilot-ai
+
+          - image: revenuepilot-merchant
+            context: ./revenuepilot-merchant/frontend
+
+          - image: revenuepilot-store-backend
+            context: ./revenuepilot-store/backend
+
+          - image: revenuepilot-store-frontend
+            context: ./revenuepilot-store/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:latest \
+            ${{ matrix.context }}
+
+      - name: Save Docker Image
+        run: |
+          docker save \
+          ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }} \
+          -o ${{ matrix.image }}.tar
+
+      - name: Upload Docker Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.image }}
+          path: ${{ matrix.image }}.tar
+
+  #############################################################
+  # JOB 3 — Trivy Scan
+  #############################################################
+
+  trivy-scan:
+    name: Security Scan (Trivy)
+    needs: docker-build
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        image:
+          - revenuepilot-ai
+          - revenuepilot-merchant
+          - revenuepilot-store-backend
+          - revenuepilot-store-frontend
+
+    steps:
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.image }}
+
+      - name: Load Docker Image
+        run: docker load -i ${{ matrix.image }}.tar
+
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
+          format: table
+          severity: MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+  #############################################################
+  # JOB 4 — Push Images to Docker Hub
+  #############################################################
+
+  docker-push:
+    name: Push Images to Docker Hub
+    needs: trivy-scan
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - image: revenuepilot-ai
+
+          - image: revenuepilot-merchant
+
+          - image: revenuepilot-store-backend
+
+          - image: revenuepilot-store-frontend
+
+    steps:
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.image }}
+
+      - name: Load Docker Image
+        run: docker load -i ${{ matrix.image }}.tar
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Push SHA Tag
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:${{ github.sha }}
+
+      - name: Push Latest Tag
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}:latest
