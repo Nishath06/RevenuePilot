@@ -27,8 +27,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 
 # Upgrade packaging tools and force-install pinned security versions
-RUN pip install --no-cache-dir --upgrade pip wheel && \
-    pip install --no-cache-dir setuptools==78.1.1 msgpack==1.2.1 && \
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir setuptools==84.0.0 wheel==0.46.2 msgpack==1.2.1 jaraco.context==6.1.2 && \
     pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
