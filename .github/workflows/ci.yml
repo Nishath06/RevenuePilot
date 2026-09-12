@@ -53,8 +53,9 @@ jobs:
       RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
 
       # Local services
-      MONGO_URI: mongodb://localhost:27017/revenuepilot
-      REDIS_URL: redis://localhost:6379
+      MONGODB_URL: ${{ secrets.MONGODB_URL }}
+  DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+
 
     steps:
       - name: Checkout Repository
