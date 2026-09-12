@@ -4,6 +4,8 @@ import hashlib
 from app.services.razorpay import razorpay_service
 from app.core.config import settings
 
+pytestmark = [pytest.mark.integration, pytest.mark.razorpay]
+
 def test_webhook_signature_verification():
     payload_body = '{"event": "payment.captured", "event_id": "evt_test_101"}'
     

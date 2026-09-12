@@ -2,6 +2,8 @@ import pytest
 from app.schemas.checkout import OrderOut, CreateOrderRequest
 from app.models.order import OrderItem
 
+pytestmark = [pytest.mark.unit]
+
 def test_order_out_schema():
     items = [
         OrderItem(

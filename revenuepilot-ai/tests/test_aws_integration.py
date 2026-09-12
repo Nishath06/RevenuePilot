@@ -12,6 +12,9 @@ from app.services.aws_sns import send_notification
 from app.services.aws_s3 import upload_report, generate_signed_url
 from app.services.aws_cloudwatch import put_metric, put_log_event
 
+# All tests here call AWS SDK services (with graceful local fallback)
+pytestmark = [pytest.mark.integration, pytest.mark.aws]
+
 client = TestClient(app)
 
 

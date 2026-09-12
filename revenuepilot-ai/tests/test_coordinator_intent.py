@@ -5,6 +5,9 @@ Tests intent classification, agent selection, confidence rules, and mixed intent
 import pytest
 from app.agents.coordinator import classify_intent, CoordinatorAgent
 
+# Module-level default: pure intent-classification tests are fast unit tests
+pytestmark = [pytest.mark.unit]
+
 
 def test_inventory_intent_classification():
     inventory_queries = [
@@ -119,6 +122,8 @@ def test_mixed_intent_detection():
     assert "payment_analysis" in res["detected_intents"]
 
 
+@pytest.mark.integration
+@pytest.mark.llm
 @pytest.mark.asyncio
 async def test_coordinator_chat_execution_timeline():
     from app.db.mongodb import connect_to_mongodb, close_mongodb_connection

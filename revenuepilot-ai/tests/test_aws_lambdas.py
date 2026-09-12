@@ -28,6 +28,9 @@ from aws_lambda.reports_lambda import lambda_handler as reports_handler
 from aws_lambda.incident_lambda import lambda_handler as incident_handler
 from aws_lambda.cloudwatch_lambda import lambda_handler as cloudwatch_handler
 
+# Lambda handler tests run locally with graceful fallback (no live AWS required for most)
+pytestmark = [pytest.mark.unit, pytest.mark.aws]
+
 
 class DummyContext:
     aws_request_id = "test_aws_req_12345"
@@ -212,6 +215,7 @@ def test_incident_cooldown_deduplication():
     assert body2["sns_alert_published"] is False
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_pdf_report_service_generation():
     """Test reports_service.generate_report for PDF format to ensure JSON safety and valid binary header."""

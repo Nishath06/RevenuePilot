@@ -10,6 +10,9 @@ from app.llm.grok_provider import GrokProvider
 from app.llm.openai_provider import OpenAIProvider
 from app.api.health import health
 
+# Provider routing tests are pure unit tests (no real API calls made)
+pytestmark = [pytest.mark.unit]
+
 
 @pytest.mark.asyncio
 async def test_gemini_provider_factory_routing():
@@ -47,6 +50,8 @@ async def test_openai_provider_factory_routing():
     assert provider.model == settings.OPENAI_MODEL
 
 
+@pytest.mark.integration
+@pytest.mark.llm
 @pytest.mark.asyncio
 async def test_health_endpoint_metadata():
     """Verify GET /health returns llm_provider, llm_status, and analytics_engine."""

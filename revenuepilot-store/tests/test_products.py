@@ -2,6 +2,8 @@ import pytest
 from app.services.seed import SAMPLE_PRODUCTS
 from app.schemas.product import ProductOut
 
+pytestmark = [pytest.mark.unit]
+
 def test_sample_products_integrity():
     assert len(SAMPLE_PRODUCTS) == 10
     for p in SAMPLE_PRODUCTS:
