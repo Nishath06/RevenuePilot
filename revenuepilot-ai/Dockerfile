@@ -28,7 +28,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 
 # Upgrade packaging tools and install dependencies.
-RUN pip install --upgrade pip setuptools wheel && \
+RUN pip install --upgrade "pip>=26.2.0" "setuptools>=83.0.0" wheel && \
     pip install -r requirements.txt
 
 ############################
@@ -51,6 +51,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Keep runtime pip patched to avoid known vulnerabilities in base image pip.
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.0"
 
 # Copy virtual environment from builder.
 COPY --from=builder /opt/venv /opt/venv
