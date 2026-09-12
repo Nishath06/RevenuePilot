@@ -4,6 +4,8 @@ import hashlib
 from app.services.razorpay import razorpay_service
 from app.core.config import settings
 
+pytestmark = [pytest.mark.integration, pytest.mark.razorpay]
+
 def test_razorpay_order_creation():
     amount = 4999.0
     order = razorpay_service.create_order(amount=amount, currency="INR")

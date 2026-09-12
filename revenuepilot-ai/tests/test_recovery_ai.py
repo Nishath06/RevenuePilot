@@ -21,6 +21,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# All tests in this file are pure unit tests — external I/O is fully mocked
+pytestmark = [pytest.mark.unit]
+
 from app.services.recovery_scoring import (
     CustomerFeatures,
     assign_segment,

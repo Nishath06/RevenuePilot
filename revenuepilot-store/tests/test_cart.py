@@ -2,6 +2,8 @@ import pytest
 from app.models.cart import CartItem
 from app.routers.cart import calculate_subtotal
 
+pytestmark = [pytest.mark.unit]
+
 def test_cart_subtotal_calculation():
     items = [
         CartItem(product_id="prod_1", title="Headphones", price=14999.00, quantity=1),

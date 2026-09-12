@@ -8,6 +8,10 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
+# All tests in this file require a live MongoDB connection + FastAPI app
+pytestmark = [pytest.mark.integration]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────────────
