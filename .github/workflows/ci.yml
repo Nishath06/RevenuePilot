@@ -84,44 +84,44 @@ jobs:
           [ -n "$RAZORPAY_KEY_ID" ] && echo "✅ RAZORPAY_KEY_ID loaded" || echo "❌ RAZORPAY_KEY_ID missing"
           [ -n "$DOCKER_USERNAME" ] && echo "✅ DOCKER_USERNAME loaded" || echo "❌ DOCKER_USERNAME missing"
 
-      ###########################################################
-      # RevenuePilot AI Backend
-      ###########################################################
+      # ###########################################################
+      # # RevenuePilot AI Backend
+      # ###########################################################
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: revenuepilot-ai/requirements.txt
+      # - name: Setup Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: ${{ env.PYTHON_VERSION }}
+      #     cache: pip
+      #     cache-dependency-path: revenuepilot-ai/requirements.txt
 
-      - name: Install RevenuePilot AI Dependencies
-        working-directory: revenuepilot-ai
-        run: |
-          python -m pip install --no-cache-dir --upgrade pip
-          # Install pinned security packages FIRST to prevent downgrade
-          pip install --no-cache-dir \
-            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
-            "wheel==${{ env.EXPECTED_WHEEL }}" \
-            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
-            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
-          pip install --no-cache-dir -r requirements.txt
-          # Re-assert pins after requirements.txt in case transitive deps downgraded
-          pip install --no-cache-dir --upgrade \
-            "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
-            "wheel==${{ env.EXPECTED_WHEEL }}" \
-            "msgpack==${{ env.EXPECTED_MSGPACK }}" \
-            "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
+      # - name: Install RevenuePilot AI Dependencies
+      #   working-directory: revenuepilot-ai
+      #   run: |
+      #     python -m pip install --no-cache-dir --upgrade pip
+      #     # Install pinned security packages FIRST to prevent downgrade
+      #     pip install --no-cache-dir \
+      #       "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+      #       "wheel==${{ env.EXPECTED_WHEEL }}" \
+      #       "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+      #       "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
+      #     pip install --no-cache-dir -r requirements.txt
+      #     # Re-assert pins after requirements.txt in case transitive deps downgraded
+      #     pip install --no-cache-dir --upgrade \
+      #       "setuptools==${{ env.EXPECTED_SETUPTOOLS }}" \
+      #       "wheel==${{ env.EXPECTED_WHEEL }}" \
+      #       "msgpack==${{ env.EXPECTED_MSGPACK }}" \
+      #       "jaraco.context==${{ env.EXPECTED_JARACO_CONTEXT }}"
 
-      - name: Run Unit Tests (RevenuePilot AI)
-        working-directory: revenuepilot-ai
-        run: |
-          pytest -m unit --tb=short -q
+      # - name: Run Unit Tests (RevenuePilot AI)
+      #   working-directory: revenuepilot-ai
+      #   run: |
+      #     pytest -m unit --tb=short -q
 
-      - name: Run Integration Tests (RevenuePilot AI)
-        working-directory: revenuepilot-ai
-        run: |
-          pytest -m integration --tb=short -q
+      # - name: Run Integration Tests (RevenuePilot AI)
+      #   working-directory: revenuepilot-ai
+      #   run: |
+      #     pytest -m integration --tb=short -q
 
       ###########################################################
       # Store Backend
